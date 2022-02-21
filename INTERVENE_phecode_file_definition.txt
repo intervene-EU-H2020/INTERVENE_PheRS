@@ -1,0 +1,15 @@
+##########################################
+#Definition of the INTERVENE phecode file# 
+##########################################
+
+3.1.2022 Tuomo Hartonen
+
+The phecode file is tab-separated and gzipped. Each row contains the following columns:
+
+#0: follow_up_time - time in years (float) from start of follow-up until either occurrence of target endpoint or end of follow-up                                                       
+#1: age_at_start - age in years (float) at start of follow-up                                                                                                                           
+#2: sex - woman=1, man=0                                                                                                                                                                
+#3: case_status - case=1, control=0                                                                                                                                                     
+#4: train_status - train=1, test=0                                                                                                                                                      
+#5-1872: one column per each phecode - Column identifier is the phecode name (e.g. 008), coded as 1 (=present) or 0 (=absent). Phecode names come from: https://phewascatalog.org/files/phecode_definitions1.2.csv.zip                                                                                                                                                             
+#1873-: additional features used from the phenotype file and defined with input flag --includevars

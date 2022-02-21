@@ -1,0 +1,21 @@
+###################################################
+#Definition of the INTERVENE ICD longitudinal file# 
+###################################################
+
+22.2.2022 Tuomo Hartonen
+
+This document contains the definition for the INTERVENE longitudinal ICD code file. The file is tab-delimited.
+
+MISSING VALUES: missing values should be denoted with -
+NOT APPLICABLE FIELDS: if a field is not applicable (for example due to gender), this should be denoted with NA.
+
+The file contains the following columns (all columns may contain values - or NA). The column number is given first following a description of the column. Note the link at the bottom of the page containing the longitudinal ICD code file header row.
+
+column 1: ID - unique identifier of the participant - string.
+column 2: EVENT_AGE - age at the event in years since birth - numeric. 
+column 3: ICD_VERSION - ICD code version - string, possible values: (9/9CM/10/10CM).
+column 4: PRIMARY_ICD - primary ICD code - string, ICD code following ICD_VERSION definitions.
+column 5: SECONDARY_ICD - secondary ICD code - string, ICD code following ICD_VERSION definitions.
+- string, ICD code following ICD_VERSION definitions.
+column 5: SECONDARY_ICD - secondary ICD code - string, ICD code following ICD_VERSION definitions.
+
