@@ -3,6 +3,7 @@
 import argparse
 import csv
 import gzip
+import sys
 
 def FinnGen2INTERVENEPheRS():
 
@@ -18,6 +19,15 @@ def FinnGen2INTERVENEPheRS():
     #save the command used to evoke this script into a file
     with open(args.outfile+'.log','wt') as logfile: logfile.write(" ".join(sys.argv))
 
+    #ICD-codes only come from certain "source" registries.
+    #for each source, we only use certain "categories"
+    #key = source register, value = list of accepted categories
+    allowed_sources = {"INPAT":["0"],#inpatient HILMO, 0=main diagnosis category
+                       "OUTPAT":["0"],#outpatient HILMO, 0=main diagnosis category
+                       "PRIM_OUT":["ICD0"],#primary healthcare outpatient visits, ICD0=cause of visit, main diagnosis
+                       "DEATH":["U","I"]#cause of death register, U=underlying cause of death, I=immediate cause of death
+    }
+    
     #read in the input row by row and convert to INTERVENE format
     if args.infile[:-2]=='gz': in_handle = gzip.open(args.infile,'rt')
     else: in_handle = open(args.infile,'rt')
@@ -31,9 +41,15 @@ def FinnGen2INTERVENEPheRS():
         with in_handle as infile:
             r = csv.reader(infile,delimiter='\t')
             for row in r:
-                ICD_version = row[11]
+                ICD_version = row[8]
+                source = row[1]
                 #if the ICD code version is different than what is listed as desired, the entry is skipped
-                if ICD_version not in args.allowed_ICDvers: continue
+                #also if the source is different than what is listed in the allowed_sources, the entry is skipped
+                if (ICD_version not in args.allowed_ICDvers) or (source not in allowed_sources): continue
+
+                category = row[9]
+                #check that the category is listed in allowed_sources
+                if category not in allowed_sources[source]: continue
                 ID = row[0]
                 Event_age = row[2]
                 primary_ICD = row[4]

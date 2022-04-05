@@ -71,18 +71,25 @@ def PheRS_preprocess():
                             r = r.split("-")
                             phecodes[row[0]][header[i]].append([float(r[0]),float(r[1])])
                     else: phecodes[row[0]][header[i]].append([None,None])
-                elif i>3 and i<7: phecodes[row[0]][header[i]] = int(row[i])
-                else: phecodes[row[0]][header[i]] = row[i]
+                elif i>3: continue #rest of the entries are not needed
+                #elif i>3 and i<7: phecodes[row[0]][header[i]] = int(row[i])
+                #else: phecodes[row[0]][header[i]] = row[i]
     phecodelist = list(phecodes.keys())
     logging.info("Phecode definitions read in successfully.")
     print("Exclude range: "+str(phecodes[args.targetphecode]['phecode_exclude_range']))
+    #excluded phecodes should not be included as predictors in the model
     excluded_phecodes = set([args.targetphecode]) #list of phecodes excluded based on exclude ranges
     for phecode in phecodelist:
         for excl_range in phecodes[args.targetphecode]['phecode_exclude_range']:
             if excl_range[0] is not None:
                 if (float(phecode)+eps>excl_range[0]) and (float(phecode)<excl_range[1]+eps):
                     excluded_phecodes.add(phecode)
-    
+
+    print("excluded phecodes:")
+    print(excluded_phecodes)
+    #while True:
+    #    z = input("any")
+    #    break
     #read in the phecode definitions
     phecodefiles = [args.ICD9tophecodefile,args.ICD10tophecodefile,args.ICD10CMtophecodefile]
     phecode_versions = ["9","10","10CM"]
@@ -98,9 +105,14 @@ def PheRS_preprocess():
             for row in infile:
                 #print(str(i)+" : "+f+" : "+str(row))
                 row = row.strip().split(',')
-                ICD2phecode[phecode_versions[ind]][row[0]] = row[1]
-                i += 1
+                icd = row[0].strip('"').strip("'").replace('.','') #remove . from the ICD codes
+                phecode = row[1].strip('"').strip("'")
+                if len(phecode)>0:
+                    #not saving mapping for ICD-codes that do not map to a phecode
+                    ICD2phecode[phecode_versions[ind]][icd] = phecode
+                    i += 1
     logging.info("ICD to phecode maps read in successfully.")
+    print(ICD2phecode["10"])
 
     #get all phecodes that are in the exclude range of the target phenotype
     #exclude_phecodes = []
@@ -126,6 +138,7 @@ def PheRS_preprocess():
         #r = csv.reader(infile,'rt')
         for row in infile:
             row = row.split('\t')
+            #print(row)
             if row[0]=='ID':
                 header = row
                 target_column = header.index(args.targetphenotype)
@@ -133,9 +146,12 @@ def PheRS_preprocess():
                 continue
             ID = row[0]
             date_of_birth = datetime.datetime.strptime(row[2],args.dateformatstr)
+            #print("dob="+str(date_of_birth))
             start_of_followup = datetime.datetime.strptime(row[92],args.dateformatstr)
+            #print("start of followup="+str(start_of_followup))
             data[ID] = [0 for i in range(len(phecodelist)+5+len(args.includevars))] #initialize the row corresponding to ID
             data[ID][3] = row[target_column]#case/control status
+            #print("case/control status="+str(data[ID][3]))
             if data[ID][3]!='NA':
                 data[ID][3] = int(data[ID][3])
                 if data[ID][3]>0:
@@ -143,10 +159,19 @@ def PheRS_preprocess():
                     case_date = datetime.datetime.strptime(row[target_time_column],args.dateformatstr)
                     diff = case_date-start_of_followup
                     data[ID][0] = diff.days/365.0 #follow-up time in years
+                else:
+                    #this means we have a control
+                    end_of_followup = datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr)
+                    diff = end_of_followup-start_of_followup
+                    data[ID][0] = diff.days/365.0 #follow-up time in years
             else:
-                data[ID][3] = np.nan
-                data[ID][0] = (datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr)-start_of_followup).days/365.0 #End of follow-up is a separate column in the phenotype file
-            data[ID][1] = (date_of_birth-start_of_followup).days/365.0  #age at start of follow up in years
+                data[ID][3] = -1 #mark excluded if variable value is NA
+                end_of_followup = datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr)
+                #print("end of followup: "+str(end_of_followup))
+                data[ID][0] = (end_of_followup-start_of_followup).days/365.0 #End of follow-up is a separate column in the phenotype file
+            data[ID][1] = (start_of_followup-date_of_birth).days/365.0  #age at start of follow up in years
+            #print("age at start of followup: "+str(data[ID][1]))
+            #print("followup time: "+str(data[ID][0]))
             sex = row[1]
             if row[1]=='female': sex = 1
             elif row[1]=='male': sex = 0
@@ -159,6 +184,9 @@ def PheRS_preprocess():
                 value = row[header.index(args.includevars[i])].strip()
                 if value=='NA' or value=='-': data[ID][5+len(phecodelist)+i] = np.nan
                 else: data[ID][5+len(phecodelist)+i] = float(value) #additional features used
+            #while True:
+            #    z = input("any")
+            #    break
     logging.info("Phenotype file read in successfully.")
             
     #read in the INTERVENE ICD code file and convert to phecode format
@@ -183,35 +211,47 @@ def PheRS_preprocess():
                 secondary_ICD = row[4]
                 
                 #add occurrence of primary ICD code
-                if primary_ICD not in ICD2phecode[ICD_version]:
-                    if primary_ICD not in not_found_ICD[ICD_version]: not_found_ICD[ICD_version] = {primary_ICD:1}
-                    else: not_found_ICD[ICD_version][primary_ICD] += 1
-                    primary_phecode = 'NA'
+                #first check if we have an exact match in the ICD to phecode mapping
+                if primary_ICD in ICD2phecode[ICD_version]: primary_phecode = ICD2phecode[ICD_version][primary_ICD]
                 else:
-                    primary_phecode = ICD2phecode[ICD_version][primary_ICD]
-                    data[ID][5+phecodelist.index(primary_phecode)] = 1
-                #add occurrence of secondary ICD code
-                if secondary_ICD not in ICD2phecode[ICD_version]:
-                    if secondary_ICD not in not_found_ICD[ICD_version]: not_found_ICD[ICD_version] = {secondary_ICD:1}
-                    else: not_found_ICD[ICD_version][secondary_ICD] += 1
-                    secondary_phecode = 'NA'
-                else:
-                    secondary_phecode = ICD2phecode[ICD_version][secondary_ICD]
-                    data[ID][5+phecodelist.index(secondary_phecode)] = 1
-
-                if (primary_phecode in excluded_phecodes) or (secondary_phecode in excluded_phecodes): data[ID][3] = -1 #exclude this ID from controls
+                    #then check if there is a match to the first three characters
+                    #of the ICD code
+                    primary_ICD_truncated = primary_ICD[:3]
+                    if primary_ICD_truncated in ICD2phecode[ICD_version]: primary_phecode = ICD2phecode[ICD_version][primary_ICD_truncated]
+                    else:
+                        #discard this ICD code
+                        if primary_ICD not in not_found_ICD[ICD_version]: not_found_ICD[ICD_version] = {primary_ICD:1}
+                        else: not_found_ICD[ICD_version][primary_ICD] += 1
+                        primary_phecode = 'NA'
+                #add the occurrence of the primary phecode
+                if primary_phecode!="NA": data[ID][5+phecodelist.index(primary_phecode)] = 1
                 
-                #if the phecodes are within the exclude range of the target phenotype/phecode, mark this ID as not suitable for controls
-                #for excl_range in phecodes[args.targetphecode]['phecode_exclude_range']:
-                #    if excl_range[0] is not None:
-                #        if (float(primary_phecode)+eps>excl_range[0]) and (float(primary_phecode)<excl_range[1]+eps):
-                #            excluded_phecodes.add(primary_phecode)
-                #            data[ID][3] = -1
-                #for excl_range in phecodes[secondary_phecode][1]:
-                #    if excl_range[0] is not None:
-                #        if (float(secondary_phecode)+eps>excl_range[0]) and (float(secondary_phecode)<excl_range[1]+eps):
-                #            excluded_phecodes.add(secondary_phecode)
-                #            data[ID][3] = -1
+                #add occurrence of secondary ICD code
+                #first check if we have an exact match in the ICD to phecode mapping
+                if secondary_ICD in ICD2phecode[ICD_version]: secondary_phecode = ICD2phecode[ICD_version][secondary_ICD]
+                else:
+                    #then check if there is a match to the first three characters
+                    #of the ICD code
+                    secondary_ICD_truncated = secondary_ICD[:3]
+                    if secondary_ICD_truncated in ICD2phecode[ICD_version]: secondary_phecode = ICD2phecode[ICD_version][secondary_ICD_truncated]
+                    else:
+                        #discard this ICD code
+                        if secondary_ICD not in not_found_ICD[ICD_version]: not_found_ICD[ICD_version] = {secondary_ICD:1}
+                        else: not_found_ICD[ICD_version][secondary_ICD] += 1
+                        secondary_phecode = 'NA'
+                
+                if secondary_phecode!="NA": data[ID][5+phecodelist.index(secondary_phecode)] = 1
+
+                #NOTE: Not using the exclude ranges to exclude individuals
+                #if (primary_phecode in excluded_phecodes) or (secondary_phecode in excluded_phecodes): data[ID][3] = -1 #exclude this ID from controls
+
+                #if primary_ICD=='G632':
+                #    print("primary_ICD: "+primary_ICD)
+                #    print("primary phecode: "+primary_phecode)
+                #    print("case/control status: "+str(data[ID][3]))
+                #    while True:
+                #        z = input("any")
+                #        break
 
     logging.info("INTERVENE ICD code file read in successfully.")
 
@@ -243,7 +283,7 @@ def PheRS_preprocess():
         for ID in data: w.writerow([ID]+data[ID])
 
     logging.info("Phecode file successfully saved.")
-    
+
     #plot statistics about phecode occurrences
     all_IDs = list(data.keys())
     data_matrix = np.zeros(shape=(len(all_IDs),len(data[all_IDs[0]])))

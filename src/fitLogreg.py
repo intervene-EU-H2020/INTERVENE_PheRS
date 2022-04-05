@@ -55,7 +55,7 @@ def fitLogReg():
                 hyper_grid[key] = []
                 for class1_frac in np.arange(min_weight,max_weight,step):
                     hyper_grid[key].append({1:class1_frac,0:1-class1_frac})
-            elif key=='l1_ratios':
+            elif key=='l1_ratio':
                 min_l1 = float(row[1])
                 max_l1 = float(row[2])
                 step = float(row[3])
@@ -72,7 +72,7 @@ def fitLogReg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt',encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID'])
+        excludevars = set(['ID','follow_up_time','age_at_start','sex','case_status','train_status'])
         for row in r: excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
 
@@ -99,21 +99,35 @@ def fitLogReg():
             usecols.append(feature2index[key])
             features.append((feature2index[key],key))
     features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data        
-    full_data = np.loadtxt(args.infile,usecols=usecols)
+    full_data = np.loadtxt(args.infile,usecols=usecols,dtype=float)
+    case_status = np.loadtxt(args.infile,usecols=feature2index['case_status'])
+    train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
+    #filter out excluded rows (e.g. because of wrong sex)
+    keep_rows = np.where(case_status>=0)[0]
+    full_data = full_data[keep_rows,:]
+    train_status = train_status[keep_rows]
+    case_status = case_status[keep_rows]
     logging.info('Training and test data read in successfully.')
 
-    #keep only training data, impute missing values (nan) and standardize
-    y_train = full_data[np.where(full_data[:,features.index('train_status')]>0)[0],features.index('case_status')]
-    X_train = full_data[np.where(full_data[:,features.index('train_status')]>0)[0],features.index('train_status')+1:]
-    print(np.where(full_data[:,features.index('train_status')]>0)[0])
+    #keep only training data and standardize
+    y_train = case_status[np.where(train_status>0)[0]]
+    #print("y_train:")
+    #print(y_train)
+    #print(y_train[0])
+    #print(type(y_train[0]))
+    #print(features.index('case_status'))
+    #print("Min y_train value="+str(np.min(y_train)))
+    #print("Max y_train value="+str(np.max(y_train)))
+    print(np.where(train_status>0))
+    X_train = full_data[np.where(train_status>0)[0],:]
+    #print(np.where(full_data[:,features.index('train_status')]>0)[0])
     #print(features)
-    print(features.index('case_status'))
-    print("full_data shape: "+str(full_data.shape))
-    print(X_train.shape)
-    print(y_train.shape)
-
-    #impute missing values
-    
+    #print(features.index('case_status'))
+    #print("full_data shape: "+str(full_data.shape))
+    #print(X_train.shape)
+    #print(y_train.shape)
+    #For now, just replace nans with zeros...
+    X_train = np.nan_to_num(X_train)
     
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
@@ -124,18 +138,29 @@ def fitLogReg():
 
     print(X_train.shape)
     print(y_train.shape)
+    print("Min X_train value="+str(np.min(X_train)))
+    print("Max X_train value="+str(np.max(X_train)))
+    print("Min y_train value="+str(np.min(y_train)))
+    print("Max y_train value="+str(np.max(y_train)))
     #fitting the model
     logreg = LogisticRegression(random_state=args.seed,solver='saga')
-    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring)
+    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=100,error_score='raise')
     grid.fit(X_train,y_train)
     logging.info("Model fitting done.")
 
     #get coefficients from the decision function of the best model and compute p-values for them
-    pvals = logit_pvalue(grid.best_estimator_,X_train)
+    #the meaning of p-values is not clear when using regularization
+    #pvals = logit_pvalue(grid.best_estimator_,X_train)
     with open(args.outdir+"best_model_coefficients.txt",'wt') as outfile:
-        w.writerow(['feature_name','coefficient','p-value'])
-        w.writerow(['intercept',grid.best_estimator_.intercept_,pvals[0]])
-        for i in range(len(features)): w.writerow([features[i],grid.best_estimator_.coef_[i],pvals[i+1]])
+        w = csv.writer(outfile,delimiter='\t')
+        w.writerow(['feature_name','coefficient'])
+        w.writerow(['intercept',grid.best_estimator_.intercept_])
+        print("len(features)="+str(len(features)))
+        print("coef shape:"+str(grid.best_estimator_.coef_.shape))
+        for i in range(len(features)):
+            #print(features[i])
+            #print(grid.best_estimator_.coef_[0,i])
+            w.writerow([features[i],grid.best_estimator_.coef_[0,i]])
     
     #save the cross-validation results to a file (this is a dictionary)
     with open(args.outdir+"cv_results.pkl",'wb') as outfile: pickle.dump(grid.cv_results_,outfile)
