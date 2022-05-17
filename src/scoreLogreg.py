@@ -24,6 +24,7 @@ def scoreLogreg():
     parser.add_argument("--infile",help="Full path to an INTERVENE phecode file. If last two letters of file name are gz, gzipped file is assumed.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
     parser.add_argument("--scaler",help="Scaler model fit on the training data in pickle format.",type=str,default=None)
+    parser.add_argument("--imputer",help="Imputer model fit on the training data in pickle format.",type=str,default=None)
     parser.add_argument("--excludevars",help="Full path to a file containing variable names that should be excluded from the model (default=nothing).",type=str,default=None)
     parser.add_argument("--model",help="Pre-fit sklearn model in pickle-format.",type=str,default=None)
     parser.add_argument("--seed",help="Random number generator seed (default=42).",type=int,default=42)
@@ -32,19 +33,20 @@ def scoreLogreg():
     args = parser.parse_args()
 
     #save the command used to evoke this script into a file
-    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', filename=args.outdir+'scoreLogreg.log')
+    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', filename=args.outdir+'scoreLogreg.log',level=logging.INFO,filemode='w')
     logging.info("The command used to evoke this script:")
     logging.info(" ".join(sys.argv))
 
-    #Read in the scaler and the model
+    #Read in the scaler, the imputer and the model
     with open(args.scaler,'rb') as infile: scaler = pickle.load(infile)
+    with open(args.imputer,'rb') as infile: imp = pickle.load(infile)
     with open(args.model,'rb') as infile: model = pickle.load(infile)
     logging.info("Scaler and model successfully loaded.")
 
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','follow_up_time','age_at_start','sex','case_status','train_status'])
+        excludevars = set(['ID','follow_up_time','case_status','train_status']+['PC'+str(i) for i in range(1,11)])
         for row in r: excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
     
@@ -58,7 +60,9 @@ def scoreLogreg():
                 feature2index = {row[0][1:]:0} #key = feature name, value = index in input file
                 for i in range(1,len(row)): feature2index[row[i]] = i
                 break
-    #then read in the training data
+    #then read in the data
+    #read the test set IDs
+    IDs = np.genfromtxt(args.infile,usecols=[0],dtype=str)
     usecols = []
     features = []
     for key in feature2index.keys():
@@ -75,18 +79,17 @@ def scoreLogreg():
     train_status = train_status[keep_rows]
     case_status = case_status[keep_rows]
 
-    
     logging.info('Training and test data read in successfully.')
 
-    #keep only test data and standardize
+    #keep only test data, impute missing values and standardize
     y_test = case_status[np.where(train_status<1)[0]]
     X_test = full_data[np.where(train_status<1)[0],:]
     #y_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('case_status')]
     #X_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('train_status')+1:]
-    #For now, just replace nans with zeros...
-    X_test = np.nan_to_num(X_test)
+    #imputation and scaling
+    X_test = imp.transform(X_test)
     X_test = scaler.transform(X_test)
-    logging.info("Division to train and test sets as well as standardization of features done successfully.")
+    logging.info("Division to train and test sets as well as imputation and standardization of features done successfully.")
 
     #predict using the loaded model
     y_pred = model.predict_proba(X_test)
@@ -100,14 +103,17 @@ def scoreLogreg():
     #save predictions to a file
     with gzip.open(args.outdir+"pred_probas.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
-        w.writerow(["#pred_class1_prob","true_class"])
-        for i in range(0,len(y_test)): w.writerow([y_pred[i,np.where(model.classes_==1)],y_test[i]])
+        w.writerow(["#ID","pred_class1_prob","true_class"])
+        for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
                                                   
     #precision-recall curve and average precision score
     print("y_pred shape:")
     print(y_pred[:,np.where(model.classes_==1)].shape)
     auprc = average_precision_score(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
     precision,recall,thresholds = precision_recall_curve(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
+    print(precision.shape)
+    print(recall.shape)
+    print(thresholds.shape)
     print("auPRC="+str(round(auprc,3)))
     rand_AUprc = round(np.sum(y_test)/len(y_test),3)
     plt.plot(np.linspace(0,1),rand_AUprc*np.ones(shape=(1,50)).flatten(),'--k',label="random, auPRC="+str(rand_AUprc))
@@ -116,13 +122,15 @@ def scoreLogreg():
     plt.ylabel("precision")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(args.outdir+"precision_recall_curve.pdf",dpi=300)
+    plt.savefig(args.outdir+"precision_recall_curve.png",dpi=300)
     plt.clf()
     with gzip.open(args.outdir+"precision_recall_curve.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(["#AUprc="+str(auprc)])
-        w.writerow(["#recall","precision"])
-        for i in range(len(precision)): w.writerow([recall[i],precision[i]])
+        w.writerow(["#recall","precision","threshold"])
+        for i in range(len(precision)):
+            if i==thresholds.shape[0]: w.writerow([recall[i],precision[i],0.0])
+            else: w.writerow([recall[i],precision[i],thresholds[i]])
                                                                             
     #receiver operator characteristics curve and AUC
     auc = roc_auc_score(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
@@ -134,19 +142,21 @@ def scoreLogreg():
     plt.ylabel("tpr")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(args.outdir+"roc_curve.pdf",dpi=300)
+    plt.savefig(args.outdir+"roc_curve.png",dpi=300)
     plt.clf()
     with gzip.open(args.outdir+"roc_curve.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(["#AUC="+str(auc)])
-        w.writerow(["#fpr","tpr"])
-        for i in range(len(fpr)): w.writerow([fpr[i],tpr[i]])
+        w.writerow(["#fpr","tpr","threshold"])
+        for i in range(len(fpr)):
+            if i==thresholds.shape[0]: w.writerow([fpr[i],tpr[i],0.0])
+            else: w.writerow([fpr[i],tpr[i],thresholds[i]])
 
     #confusion matrix
     #print(y_pred_labels)
     #print(y_pred_labels.shape)
     ConfusionMatrixDisplay.from_predictions(y_test,y_pred_labels)
-    plt.savefig(args.outdir+"confusion_matrix.pdf",dpi=300)
+    plt.savefig(args.outdir+"confusion_matrix.png",dpi=300)
     plt.clf()
     
     logging.info("Prediction metrics computed and saved successfully.")

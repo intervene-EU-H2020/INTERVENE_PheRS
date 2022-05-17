@@ -13,6 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
 from scipy.stats import norm
 
@@ -48,13 +49,13 @@ def fitLogReg():
             key = row[0]
             if row[0][0]=='#': continue #skip comment lines that start with #
             if key=='penalty': hyper_grid[key] = row[1:]
-            elif key=='class_weight':
-                min_weight = float(row[1])
-                max_weight = float(row[2])
-                step = float(row[3])
-                hyper_grid[key] = []
-                for class1_frac in np.arange(min_weight,max_weight,step):
-                    hyper_grid[key].append({1:class1_frac,0:1-class1_frac})
+            #elif key=='class_weight':
+            #    min_weight = float(row[1])
+            #    max_weight = float(row[2])
+            #    step = float(row[3])
+            #    hyper_grid[key] = []
+            #    for class1_frac in np.arange(min_weight,max_weight,step):
+            #        hyper_grid[key].append({1:class1_frac,0:1-class1_frac})
             elif key=='l1_ratio':
                 min_l1 = float(row[1])
                 max_l1 = float(row[2])
@@ -72,7 +73,7 @@ def fitLogReg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt',encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','follow_up_time','age_at_start','sex','case_status','train_status'])
+        excludevars = set(['ID','follow_up_time','case_status','train_status']+['PC'+str(i) for i in range(1,11)])
         for row in r: excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
 
@@ -108,7 +109,7 @@ def fitLogReg():
     train_status = train_status[keep_rows]
     case_status = case_status[keep_rows]
     logging.info('Training and test data read in successfully.')
-
+    
     #keep only training data and standardize
     y_train = case_status[np.where(train_status>0)[0]]
     #print("y_train:")
@@ -126,8 +127,12 @@ def fitLogReg():
     #print("full_data shape: "+str(full_data.shape))
     #print(X_train.shape)
     #print(y_train.shape)
-    #For now, just replace nans with zeros...
-    X_train = np.nan_to_num(X_train)
+
+    #impute missing values as mean of the column
+    imp = SimpleImputer(missing_values=np.nan,strategy='mean')
+    X_train = imp.fit_transform(X_train)
+    #save the fitted SimpleImputer to file for use in scoring with the model
+    with open(args.outdir+"imputer.pkl",'wb') as outfile: pickle.dump(imp,outfile)
     
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
@@ -143,7 +148,7 @@ def fitLogReg():
     print("Min y_train value="+str(np.min(y_train)))
     print("Max y_train value="+str(np.max(y_train)))
     #fitting the model
-    logreg = LogisticRegression(random_state=args.seed,solver='saga')
+    logreg = LogisticRegression(random_state=args.seed,solver='saga',class_weight='balanced')
     grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=100,error_score='raise')
     grid.fit(X_train,y_train)
     logging.info("Model fitting done.")
@@ -154,7 +159,7 @@ def fitLogReg():
     with open(args.outdir+"best_model_coefficients.txt",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(['feature_name','coefficient'])
-        w.writerow(['intercept',grid.best_estimator_.intercept_])
+        w.writerow(['intercept',grid.best_estimator_.intercept_[0]])
         print("len(features)="+str(len(features)))
         print("coef shape:"+str(grid.best_estimator_.coef_.shape))
         for i in range(len(features)):
