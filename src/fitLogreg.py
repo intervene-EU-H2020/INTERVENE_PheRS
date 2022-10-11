@@ -7,6 +7,7 @@ import gzip
 import pickle
 import sys
 
+import pandas as pd
 import numpy as np
 
 from sklearn.linear_model import LogisticRegression
@@ -73,7 +74,7 @@ def fitLogReg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt',encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','follow_up_time','case_status','train_status']+['PC'+str(i) for i in range(1,11)])
+        excludevars = set(['ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
         for row in r: excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
 
@@ -95,32 +96,29 @@ def fitLogReg():
     #then read in the training data
     usecols = []
     features = []
+    excludevars.add('case_status')
+    excludevars.add('train_status')
     for key in feature2index.keys():
         if key not in excludevars:
-            usecols.append(feature2index[key])
+            usecols.append(key)
             features.append((feature2index[key],key))
-    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data        
-    full_data = np.loadtxt(args.infile,usecols=usecols,dtype=float)
-    case_status = np.loadtxt(args.infile,usecols=feature2index['case_status'])
-    train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
+    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
+    print(usecols)
+    full_data = pd.read_csv(args.infile,delimiter='\t')
+    case_status = full_data['case_status']
+    train_status = full_data['train_status']
     #filter out excluded rows (e.g. because of wrong sex)
-    keep_rows = np.where(case_status>=0)[0]
-    full_data = full_data[keep_rows,:]
-    train_status = train_status[keep_rows]
-    case_status = case_status[keep_rows]
+    #keep_rows = np.where(case_status>=0)[0]
+    full_data = full_data.loc[full_data['case_status']>=0]
+    train_status = train_status.loc[full_data['case_status']>=0]
+    case_status = case_status.loc[full_data['case_status']>=0]
     logging.info('Training and test data read in successfully.')
     
     #keep only training data and standardize
-    y_train = case_status[np.where(train_status>0)[0]]
-    #print("y_train:")
-    #print(y_train)
-    #print(y_train[0])
-    #print(type(y_train[0]))
-    #print(features.index('case_status'))
-    #print("Min y_train value="+str(np.min(y_train)))
-    #print("Max y_train value="+str(np.max(y_train)))
-    print(np.where(train_status>0))
-    X_train = full_data[np.where(train_status>0)[0],:]
+    y_train = case_status.loc[full_data['train_status']>0]
+    
+    X_train = full_data.loc[full_data['train_status']>0]
+    X_train = X_train[usecols]
     #print(np.where(full_data[:,features.index('train_status')]>0)[0])
     #print(features)
     #print(features.index('case_status'))

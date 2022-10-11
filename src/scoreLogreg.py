@@ -7,6 +7,7 @@ import pickle
 import sys
 
 import numpy as np
+import pandas as pd
 
 import matplotlib
 matplotlib.use('Agg')
@@ -46,7 +47,7 @@ def scoreLogreg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','follow_up_time','case_status','train_status']+['PC'+str(i) for i in range(1,11)])
+        excludevars = set(['ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
         for row in r: excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
     
@@ -65,25 +66,27 @@ def scoreLogreg():
     IDs = np.genfromtxt(args.infile,usecols=[0],dtype=str)
     usecols = []
     features = []
+    excludevars.add('case_status')
+    excludevars.add('train_status')
     for key in feature2index.keys():
         if key not in excludevars:
-            usecols.append(feature2index[key])
+            usecols.append(key)
             features.append((feature2index[key],key))
     features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
-    full_data = np.loadtxt(args.infile,usecols=usecols,dtype=float)
-    case_status = np.loadtxt(args.infile,usecols=feature2index['case_status'])
-    train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
+    full_data = pd.read_csv(args.infile,delimiter='\t')
+    #case_status = np.loadtxt(args.infile,usecols=feature2index['case_status'])
+    #train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
     #filter out excluded rows (e.g. because of wrong sex)
-    keep_rows = np.where(case_status>=0)[0]
-    full_data = full_data[keep_rows,:]
-    train_status = train_status[keep_rows]
-    case_status = case_status[keep_rows]
+    full_data = full_data.loc[full_data['case_status']>=0]
+    train_status = full_data['train_status']
+    case_status = full_data['case_status']
 
     logging.info('Training and test data read in successfully.')
 
     #keep only test data, impute missing values and standardize
-    y_test = case_status[np.where(train_status<1)[0]]
-    X_test = full_data[np.where(train_status<1)[0],:]
+    y_test = case_status.loc[full_data['train_status']<1].values
+    X_test = full_data.loc[full_data['train_status']<1]
+    X_test = X_test[usecols]
     #y_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('case_status')]
     #X_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('train_status')+1:]
     #imputation and scaling
@@ -94,9 +97,11 @@ def scoreLogreg():
     #predict using the loaded model
     y_pred = model.predict_proba(X_test)
     y_pred_labels = model.predict(X_test)
-    #print(y_pred)
+    print('y_pred')
+    print(y_pred)
     print(y_pred.shape)
-    #print(y_test)
+    print('y_test')
+    print(y_test)
     print(y_test.shape)
     logging.info("Labels for the test set predicted successfully.")
 
@@ -104,6 +109,7 @@ def scoreLogreg():
     with gzip.open(args.outdir+"pred_probas.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(["#ID","pred_class1_prob","true_class"])
+        
         for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
                                                   
     #precision-recall curve and average precision score
