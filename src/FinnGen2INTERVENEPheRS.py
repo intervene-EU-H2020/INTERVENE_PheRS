@@ -4,6 +4,7 @@ import argparse
 import csv
 import gzip
 import sys
+import codecs
 
 def FinnGen2INTERVENEPheRS():
 
@@ -29,7 +30,7 @@ def FinnGen2INTERVENEPheRS():
     }
     
     #read in the input row by row and convert to INTERVENE format
-    if args.infile[:-2]=='gz': in_handle = gzip.open(args.infile,'rt')
+    if args.infile[:-2]=='gz': in_handle = gzip.open(args.infile,'rt',encoding='utf-8')
     else: in_handle = open(args.infile,'rt')
 
     if args.outfile[:-2]=='gz': out_handle = gzip.open(args.outfile,'wt')

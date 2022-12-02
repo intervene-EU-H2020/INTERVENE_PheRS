@@ -17,13 +17,15 @@ def PheRSwrapper():
     parser.add_argument("--ICD10tophecodefile",help="Full path to the ICD10 to phecode map (NOTE: comma-separated).",type=str,default=None)
     parser.add_argument("--ICD10CMtophecodefile",help="Full path to the ICD10CM to phecode map (NOTE: comma-separated).",type=str,default=None)
     parser.add_argument("--targetphenotype",help="Name of the target phenotype.",type=str,default=None)
-    parser.add_argument("--excludephecodes",help="Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None,nargs='+')
+    parser.add_argument("--excludephecodes",help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
     parser.add_argument("--testfraction",help="Fraction of IDs used in test set (default=0.15). Sampling at random.",type=str,default='0.15')
     parser.add_argument("--testidfile",help="Full path to a file containing the IDs used in the test set. If given, overrides --testfraction.",type=str,default=None)
-    parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2011-01-01 2012-12-31).",type=str,nargs=2,default=['2009-01-01','2010-12-31'])
-    parser.add_argument('--exposure_window',help='Start and end dates for exposure (default = 2001-01-01 2010-12-31).',type=str,nargs=2,default=['1999-01-01','2008-12-31'])
-    parser.add_argument('--observation_window',help='Start and end dates for observation (default= 2013-01-01 2021-01-01).',type=str,nargs=2,default=['2011-01-01','2019-01-01'])
+    parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2009-01-01 2010-12-31).",type=str,nargs=2,default=['2009-01-01','2010-12-31'])
+    parser.add_argument('--exposure_window',help='Start and end dates for exposure (default = 1999-01-01 2008-12-31).',type=str,nargs=2,default=['1999-01-01','2008-12-31'])
+    parser.add_argument('--observation_window',help='Start and end dates for observation (default= 2011-01-01 2019-01-01).',type=str,nargs=2,default=['2011-01-01','2019-01-01'])
+    parser.add_argument("--minage",help="Minimum age at the start of the observation period to include (default=32).",type=float,default=32)
+    parser.add_argument("--maxage",help="Maximum age at the start of the observation period to include (default=100).",type=float,default=100)
     parser.add_argument("--seed",help="Random number generator seed (default=42).",type=str,default='42')
     parser.add_argument("--dateformatstr",help="Date format used (default='%%Y-%%m-%%d')",type=str,default='%Y-%m-%d')
     parser.add_argument("--excludeICDfile",help="Full path to a file containing the ICD codes to be excluded. Format per row: ICD_version, ICD_code.",type=str,default=None)
@@ -47,27 +49,28 @@ def PheRSwrapper():
     logging.info(cmd)
     os.system(cmd)
     #run preprocessing
-    excludephecodes = ''
-    for e in args.excludephecodes: excludephecodes += ' '+e
+    #excludephecodes = ''
+    #for e in args.excludephecodes: excludephecodes += ' '+e
     includevars = ''
     for i in args.includevars: includevars += ' '+i
     
-    cmd = 'python3 /finngen/red/thartone/INTERVENE/GitHub/INTERVENE_PheRS/src/PheRS_preprocess.py --ICDfile '+args.ICDfile+' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes'+excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --includevars '+includevars+' --testfraction '+args.testfraction+' --frequency '+args.frequency
-    if args.controlfraction!=None: cmd += ' '+args.controlfraction
-    if args.excludeICDfile!=None: cmd += ' '+args.excludeICDfile
-    if args.testidfile!=None: cmd += ' '+args.testidfile
+    cmd = 'python3 /finngen/red/thartone/git/INTERVENE_PheRS/src/PheRS_preprocess.py --ICDfile '+args.ICDfile+' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes '+args.excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --testfraction '+args.testfraction+' --frequency '+args.frequency+' --maxage '+str(args.maxage)+' --minage '+str(args.minage)
+    if args.controlfraction!=None: cmd += ' --controlfraction '+args.controlfraction
+    if args.excludeICDfile!=None: cmd += ' --excludeICDfile '+args.excludeICDfile
+    if args.testidfile!=None: cmd += ' --testidfile '+args.testidfile
+    if len(includevars)>0: cmd += ' --includevars '+includevars
     logging.info(cmd)
     os.system(cmd)
 
     print('Preprocessing done.')
     #run PheRS fitting
-    cmd = 'python3 /finngen/red/thartone/INTERVENE/GitHub/INTERVENE_PheRS/src/fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
+    cmd = 'python3 /finngen/red/thartone/git/INTERVENE_PheRS/src/fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
     logging.info(cmd)
     print('Starting to fit...')
     os.system(cmd)
 
     #score the fitted model
-    cmd = 'python3 /finngen/red/thartone/INTERVENE/GitHub/INTERVENE_PheRS/src/scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
+    cmd = 'python3 /finngen/red/thartone/git/INTERVENE_PheRS/src/scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
     logging.info(cmd)
     os.system(cmd)
 

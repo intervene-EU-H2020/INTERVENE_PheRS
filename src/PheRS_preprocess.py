@@ -14,6 +14,7 @@ import multiprocessing as mp
 from operator import itemgetter
 import numpy as np
 from scipy.sparse import csc_matrix
+from dateutil.relativedelta import relativedelta
 
 import plotly.express as px
 
@@ -31,13 +32,15 @@ def PheRS_preprocess():
     parser.add_argument("--ICD10tophecodefile",help="Full path to the ICD10 to phecode map (NOTE: comma-separated).",type=str,default=None)
     parser.add_argument("--ICD10CMtophecodefile",help="Full path to the ICD10CM to phecode map (NOTE: comma-separated).",type=str,default=None)
     parser.add_argument("--targetphenotype",help="Name of the target phenotype.",type=str,default=None)
-    parser.add_argument("--excludephecodes",help="Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None,nargs='+')
+    parser.add_argument("--excludephecodes",help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
     parser.add_argument("--testfraction",help="Fraction of IDs used in test set (default=0.15). Sampling at random.",type=float,default=0.15)
     parser.add_argument("--testidfile",help="Full path to a file containing the IDs used in the test set. If given, overrides --testfraction.",type=str,default=None)
-    parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2011-01-01 2012-12-31).",type=str,nargs=2,default=['2011-01-01','2012-12-31'])
-    parser.add_argument('--exposure_window',help='Start and end dates for exposure (default = 2001-01-01 2010-12-31).',type=str,nargs=2,default=['2001-01-01','2010-12-31'])
-    parser.add_argument('--observation_window',help='Start and end dates for observation (default= 2013-01-01 2021-01-01).',type=str,nargs=2,default=['2013-01-01','2021-01-01'])
+    parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2010-01-01 2011-12-31).",type=str,nargs=2,default=['2010-01-01','2011-12-31'])
+    parser.add_argument('--exposure_window',help='Start and end dates for exposure (default = 2000-01-01 2009-12-31).',type=str,nargs=2,default=['2000-01-01','2009-12-31'])
+    parser.add_argument('--observation_window',help='Start and end dates for observation (default= 2012-01-01 2020-01-01).',type=str,nargs=2,default=['2012-01-01','2020-01-01'])
+    parser.add_argument("--minage",help="Minimum age at the start of the observation period to include (default=32).",type=float,default=32)
+    parser.add_argument("--maxage",help="Maximum age at the start of the observation period to include (default=100).",type=float,default=100)
     parser.add_argument("--seed",help="Random number generator seed (default=42).",type=int,default=42)
     parser.add_argument("--dateformatstr",help="Date format used (default='%Y-%m-%d')",type=str,default='%Y-%m-%d')
     parser.add_argument("--excludeICDfile",help="Full path to a file containing the ICD codes to be excluded. Format per row: ICD_version, ICD_code.",type=str,default=None)
@@ -90,7 +93,11 @@ def PheRS_preprocess():
     logging.info("Phecode definitions read in successfully.")
     
     #excluded phecodes should not be included as predictors in the model
-    excluded_phecodes = set(args.excludephecodes) #list of phecodes excluded
+    with open(args.excludephecodes,'rt') as infile:
+        r = csv.reader(infile,delimiter='\t')
+        for row in r: excluded_phecodes = row
+    
+    excluded_phecodes = set(excluded_phecodes) #list of phecodes excluded
     #later we will add to this list phecodes that have less than args.frequency
     #of occurrences or more than args.missing missing values
     
@@ -129,6 +136,7 @@ def PheRS_preprocess():
     #4: train_status - train=1, test=0
     #5-1872: one column per each phecode - Column identifier is the phecode name (e.g. 008), coded as 1 (=present) or 0 (=absent). Phecode names come from: https://phewascatalog.org/files/phecode_definitions1.2.csv.zip
     #1873-: additional features used from the phenotype file and defined with input flag --includevars
+    feature_names = ["date_of_birth","end_of_follow_up","sex","case_status","train_status"]+phecodelist+args.includevars
 
     if args.phenotypefile[-2:]=='gz': in_handle = gzip.open(args.phenotypefile,'rt',encoding='utf-8')
     else: in_handle = open(args.phenotypefile,'rt',encoding='utf-8')
@@ -147,14 +155,24 @@ def PheRS_preprocess():
                 continue
             ID = row[0]
             date_of_birth = datetime.datetime.strptime(row[2],args.dateformatstr)
+            end_of_followup = datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr) #end of follow-up in the biobank
             #print("dob="+str(date_of_birth))
             #start_of_followup = datetime.datetime.strptime(row[92],args.dateformatstr)
             #print("start of followup="+str(start_of_followup))
             data[ID] = [0 for i in range(len(phecodelist)+5+len(args.includevars))] #initialize the row corresponding to ID
             data[ID][0] = date_of_birth
+            #if age is requested as a predictor calculate age at the start of the observation window
+            if 'age' in args.includevars:
+                age = (observation_start-date_of_birth).days/365.25
+                data[ID][feature_names.index('age')] = age
             
-            #If the person is born after the start of the exposure period, they are excluded
-            if data[ID][0]>exposure_start:
+            #If
+            #0) the person's end of follow-up is before the end of the washout period
+            #1) the person is born after the start of the exposure period
+            #2) the person is younger than args.minage at the start of the observation period
+            #3) the person is older than args.maxage at the start of the observation period
+            # they are excluded
+            if (data[ID][0]>exposure_start) or (data[ID][0]>observation_start-relativedelta(years=args.minage) or (data[ID][0]<observation_start-relativedelta(years=args.maxage)) or (end_of_followup<washout_end)):
                 #print("dob="+str(date_of_birth))
                 data[ID][3] = -1
                 N_excluded += 1
@@ -163,7 +181,7 @@ def PheRS_preprocess():
             #Now diagnoses are collected only from the time period:
             #start of observation -> end of observation
             #In more detail:
-            #0) If the person's end of follow-up is before the end of the washout period -> EXCLUDE
+            #0) If the person receives the diagnosis after their end of follow-up -> EXCLUDE
             #1) If the person receives the diagnosis during observation period -> CASE
             #2) If the person never receives the diagnosis -> CONTROL
             #3) If the person receives the diagnosis before the end of the "exposure window" -> EXCLUDE from analysis
@@ -179,9 +197,12 @@ def PheRS_preprocess():
                     #diff = case_date-date_of_birth
                     data[ID][1] = case_date#diff.days/365.0 #age at first diagnosis
                     #print('case date: '+str(case_date)+", birth: "+str(date_of_birth)+', age: '+str(data[ID][0]))
-                    if data[ID][1]>=observation_start and data[ID][1]<=observation_end:
+                    if (data[ID][1]>=observation_start) and (data[ID][1]<=observation_end):
                         #The diagnosis was received during the observation period
                         N_cases += 1
+                    elif case_date>end_of_followup:
+                        #diagnosis is marked to have happened after the end of follow-up for this ID, which does not make sense, thus we exclude
+                        data[ID][3] = -1
                     else:
                         #diagnosis was outside the observation period
                         #if diagnosis happens after the end of observation period, we have a control
@@ -191,14 +212,14 @@ def PheRS_preprocess():
                     #print('case date: '+str(case_date)+", birth: "+str(date_of_birth)+', age: '+str(data[ID][0])+" | case status="+str(data[ID][2]))
                 else:
                     #this means we have a control
-                    end_of_followup = datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr)
+                    #end_of_followup = datetime.datetime.strptime(row[header.index("END_OF_FOLLOWUP")],args.dateformatstr)w
                     #diff = end_of_followup-date_of_birth
                     data[ID][1] = end_of_followup#diff.days/365.0 #follow-up time in years
                     #print('eof:')
                     #print(data[ID][1])
                     #print('observation_end:')
                     #print(observation_end)
-                    if data[ID][0]<=observation_end:
+                    if data[ID][1]<=observation_end:
                         #follow-up ending before observation period end
                         data[ID][3] = -1
                     else:
@@ -214,37 +235,48 @@ def PheRS_preprocess():
                 data[ID][1] = end_of_followup#End of follow-up is a separate column in the phenotype file
             #data[ID][1] = (start_of_followup-date_of_birth).days/365.0  #age at start of follow up in years
             
+            #print(header)
+            #print(row)
             sex = row[1]
             if row[1]=='female': sex = 1
             elif row[1]=='male': sex = 0
             elif row[1]=='other': sex = -1
             else: sex = row[1]
             data[ID][2] = sex #sex
-            for i in range(len(args.includevars)):
+            for var in args.includevars:
+                if var=='age': continue
                 #print(args.includevars[i])
                 #print(row[header.index(args.includevars[i])])
-                value = row[header.index(args.includevars[i])].strip()
-                if value=='NA' or value=='-': data[ID][5+len(phecodelist)+i] = np.nan
-                else: data[ID][5+len(phecodelist)+i] = float(value) #additional features used
+                mpf_index = header.index(var)
+                out_index = feature_names.index(var)
+                
+                value = row[mpf_index].strip()
+                #print("i="+str(i))
+                #print(feature_names[5+len(phecodelist)+i])
+                if value=='NA' or value=='-': data[ID][out_index] = np.nan
+                else: data[ID][out_index] = float(value) #additional features used
     logging.info("Phenotype file read in successfully.")
     
     #Then draw args.controlfraction*N_cases controls to use
     #remove other controls and all excluded IDs (where case_status=-1)
     #get a list of all control IDs
     control_IDs = [ID for ID in data if data[ID][3]==0]
+    print("Total number of IDs="+str(len(list(data.keys()))))
+    print("Number of cases="+str(N_cases))
+    print("Number of excluded IDs="+str(len([ID for ID in data if data[ID][3]==-1])))
+    print("Number of control IDs before sampling="+str(len(control_IDs)))
+    
     if args.controlfraction is not None:
         #sample final controls
         random.seed(args.seed)
         final_control_IDs = random.sample(control_IDs,int(args.controlfraction*N_cases))
     else: final_control_IDs = control_IDs
-    
+    print("Number of control IDs="+str(len(final_control_IDs)))
     #keep only these and case IDs
-    print("Number of excluded IDs="+str(len([ID for ID in data if data[ID][3]==-1])))
+    
     case_IDs = [ID for ID in data if data[ID][3]==1]
     data = {key: data[key] for key in case_IDs+final_control_IDs}
-    print("Number of cases="+str(N_cases))
     print("Number of case IDs="+str(len(case_IDs)))
-    print("Number of control IDs="+str(len(final_control_IDs)))
     
     
     #read in the INTERVENE ICD code file and convert to phecode format
@@ -335,7 +367,7 @@ def PheRS_preprocess():
     logging.info("Division to train and test sets done successfully.")    
 
     #save the phecode file
-    feature_names = ["date_of_birth","end_of_follow_up","sex","case_status","train_status"]+phecodelist+args.includevars
+    #feature_names = ["date_of_birth","end_of_follow_up","sex","case_status","train_status"]+phecodelist+args.includevars
     with gzip.open(args.outdir+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz','wt',encoding='utf-8') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         #w.writerow(["#INTERVENE PheRS ML input file"])
@@ -349,7 +381,7 @@ def PheRS_preprocess():
     #skip date of birth
     all_IDs = list(data.keys())
     data_matrix = np.zeros(shape=(len(all_IDs),len(data[all_IDs[0]][2:])))
-    print(data[all_IDs[0]])
+    
     for i in range(len(all_IDs)): data_matrix[i,:] = np.array(data[all_IDs[i]][2:])
     
 
