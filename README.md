@@ -1,5 +1,6 @@
 # INTERVENE_PheRS
 
+<<<<<<< HEAD
 This repository contains code for training Phenotype Risk Score models (PheRS) based on the INTERVENE data formats. Below you can find a description of the data files needed and instructions on how to run the analysis. The commands used to replicate the analyses done in FinnGen are listed in section [Calls to replicate the FinnGen analyses](#replicate) .
 
 The scripts have been run in the FinnGen sandbox using Python version 2.7.16 and the following packages:
@@ -23,11 +24,17 @@ Other packages used should be standard Python, but a full list of installed pack
 ## Usage instructions <a name="usage"></a>
 
 The Python script
+=======
+## Usage instructions
+
+This section is under construction. The Python script
+>>>>>>> 21c908e7352b05e9244b92f7b6c5e0d3f36237fd
 
 ```
 src/PheRSwrapper.py
 ```
 
+<<<<<<< HEAD
 converts ICD10 codes input int the INTERVENE longitudinal file format into phecodes and preprocesses data for PheRS model fitting. It then fits the PheRS-model (elastic net) and makes predictions on a test set also reporting prediction performance. The script also writes several log files that list all the files and parameter settings of the run. Help can be viewed by typing
 
 ```
@@ -250,18 +257,31 @@ Main updates to previous version
 * Some bug fixes, for example fixed a bug that lead to wrong IDs being written for the pred_probas-files that contain predicted PheRS scores for test set individuals.
 
 ### Update corresponding to the first run of PheRS results in FinnGen
+=======
+converts ICD10 codes input int the INTERVENE longitudinal file format into phecodes and preprocesses data for PheRS model fitting. It then fits the PheRS-model (elastic net) and makes predictions on a test set also reporting prediction performance. The script also writes several log files that list all the files and parameter settings of the run. More detailed usage instructions will follow later.
+
+## Update corresponding to the first run of PheRS results in FinnGen
+>>>>>>> 21c908e7352b05e9244b92f7b6c5e0d3f36237fd
 
 Tuomo Hartonen 2.12.2022
 
 Main updates to previous version
 
+<<<<<<< HEAD
 * ICD10 to phecode mapping was updated so that the ICD10 code M50.8 with no matching phecode was by manual curation set to map to phecode 714.1: Rheumatoid arthritis.
+=======
+* ICD10 to phecode mapping was updated so that the ICD10 code M50.8 with no matching phecode was by manual curation set to map to phecode 714.1: “Rheumatoid arthritis”.
+>>>>>>> 21c908e7352b05e9244b92f7b6c5e0d3f36237fd
 
 * PheRS models have been fitted in FinnGen for all endpoints and the results can be viewed from the INTERVENE flagship Google Drive under folder `PheRS-project`.
 
 * Several minor changes to the study setup were made so that everything is comparable with the setup used by Kira. Detailed description of the study setup can also be found from INTERVENE flagship Google Drive in the same folder.
 
+<<<<<<< HEAD
 ### Update after fitting first models in FinnGen
+=======
+## Update after fitting first models in FinnGen
+>>>>>>> 21c908e7352b05e9244b92f7b6c5e0d3f36237fd
 
 Tuomo Hartonen 5.4.2022
 
@@ -280,7 +300,11 @@ There were only three one-to-many mapping ICD10 codes with more than 100 longitu
 
 Notice that at this point, only ICD10 codes have been used in the analyses and other phecode maps have not been utilized.
 
+<<<<<<< HEAD
 ### Initial upload
+=======
+## Initial upload
+>>>>>>> 21c908e7352b05e9244b92f7b6c5e0d3f36237fd
 
 Tuomo Hartonen 21.2.2022
 
