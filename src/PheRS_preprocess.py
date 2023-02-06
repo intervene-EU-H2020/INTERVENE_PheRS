@@ -16,8 +16,6 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from dateutil.relativedelta import relativedelta
 
-import plotly.express as px
-
 def PheRS_preprocess():
 
     parser = argparse.ArgumentParser()

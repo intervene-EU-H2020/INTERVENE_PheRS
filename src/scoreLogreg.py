@@ -62,8 +62,7 @@ def scoreLogreg():
                 for i in range(1,len(row)): feature2index[row[i]] = i
                 break
     #then read in the data
-    #read the test set IDs
-    IDs = np.genfromtxt(args.infile,usecols=[0],dtype=str)
+    
     usecols = []
     features = []
     excludevars.add('case_status')
@@ -78,15 +77,21 @@ def scoreLogreg():
     #train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
     #filter out excluded rows (e.g. because of wrong sex)
     full_data = full_data.loc[full_data['case_status']>=0]
-    train_status = full_data['train_status']
+    #filter out training samples
+    full_data = full_data.loc[full_data['train_status']==0]
+    #print(full_data.sort_values(by='#ID'))
+    #print(full_data['train_status'].value_counts())
+    #train_status = full_data['train_status']
     case_status = full_data['case_status']
+    #get the test set IDs
+    IDs = list(full_data['#ID'])#np.genfromtxt(args.infile,usecols=[0],dtype=str)
 
     logging.info('Training and test data read in successfully.')
 
     #keep only test data, impute missing values and standardize
-    y_test = case_status.loc[full_data['train_status']<1].values
-    X_test = full_data.loc[full_data['train_status']<1]
-    X_test = X_test[usecols]
+    y_test = case_status.values
+    #X_test = full_data.loc[full_data['train_status']<1]
+    X_test = full_data[usecols]
     #y_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('case_status')]
     #X_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('train_status')+1:]
     #imputation and scaling
@@ -97,12 +102,12 @@ def scoreLogreg():
     #predict using the loaded model
     y_pred = model.predict_proba(X_test)
     y_pred_labels = model.predict(X_test)
-    print('y_pred')
-    print(y_pred)
-    print(y_pred.shape)
-    print('y_test')
-    print(y_test)
-    print(y_test.shape)
+    #print('y_pred')
+    #print(y_pred)
+    #print(y_pred.shape)
+    #print('y_test')
+    #print(y_test)
+    #print(y_test.shape)
     logging.info("Labels for the test set predicted successfully.")
 
     #save predictions to a file
@@ -113,13 +118,13 @@ def scoreLogreg():
         for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
                                                   
     #precision-recall curve and average precision score
-    print("y_pred shape:")
-    print(y_pred[:,np.where(model.classes_==1)].shape)
+    #print("y_pred shape:")
+    #print(y_pred[:,np.where(model.classes_==1)].shape)
     auprc = average_precision_score(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
     precision,recall,thresholds = precision_recall_curve(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
-    print(precision.shape)
-    print(recall.shape)
-    print(thresholds.shape)
+    #print(precision.shape)
+    #print(recall.shape)
+    #print(thresholds.shape)
     print("auPRC="+str(round(auprc,3)))
     rand_AUprc = round(np.sum(y_test)/len(y_test),3)
     plt.plot(np.linspace(0,1),rand_AUprc*np.ones(shape=(1,50)).flatten(),'--k',label="random, auPRC="+str(rand_AUprc))
