@@ -12,10 +12,16 @@ The scripts have been run in the FinnGen sandbox using Python version 3.7.3 and 
 
 Other packages used should be standard Python, but a full list of installed packages in the FinnGen sandbox environment can be viewed at `data/requirements_finngen.txt`.
 
-Note that in order for the scripts to work, you will need to add the package root to your PYTHONPATH:
+Note that in order for the scripts to work, you will need to add the package src/ directory to your PATH:
 
 ```
-export PYTHONPATH=/absolute/path/to/INTERVENE_PheRS/
+export PATH="/full/path/to/INTERVENE_PheRS/src/:$PATH"
+```
+
+and to give executable rights to the Python scripts:
+
+```
+chmod u+x /full/path/to/INTERVENE_PheRS/src/*.py
 ```
 
 

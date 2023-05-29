@@ -54,7 +54,7 @@ def PheRSwrapper():
     includevars = ''
     for i in args.includevars: includevars += ' '+i
     
-    cmd = 'python3 PheRS_preprocess.py --ICDfile '+args.ICDfile+' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes '+args.excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --testfraction '+args.testfraction+' --frequency '+args.frequency+' --maxage '+str(args.maxage)+' --minage '+str(args.minage)
+    cmd = 'PheRS_preprocess.py --ICDfile '+args.ICDfile+' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes '+args.excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --testfraction '+args.testfraction+' --frequency '+args.frequency+' --maxage '+str(args.maxage)+' --minage '+str(args.minage)
     if args.controlfraction!=None: cmd += ' --controlfraction '+args.controlfraction
     if args.excludeICDfile!=None: cmd += ' --excludeICDfile '+args.excludeICDfile
     if args.testidfile!=None: cmd += ' --testidfile '+args.testidfile
@@ -64,13 +64,13 @@ def PheRSwrapper():
 
     print('Preprocessing done.')
     #run PheRS fitting
-    cmd = 'python3 fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
+    cmd = 'fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
     logging.info(cmd)
     print('Starting to fit...')
     os.system(cmd)
 
     #score the fitted model
-    cmd = 'python3 scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
+    cmd = 'scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
     logging.info(cmd)
     os.system(cmd)
         
