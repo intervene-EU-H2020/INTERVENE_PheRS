@@ -2,7 +2,7 @@
 
 This repository contains code for training Phenotype Risk Score models (PheRS) based on the INTERVENE data formats. Below you can find a description of the data files needed and instructions on how to run the analysis. The commands used to replicate the analyses done in FinnGen are listed in section [Calls to replicate the FinnGen analyses](#replicate) .
 
-The scripts have been run in the FinnGen sandbox using Python version 2.7.16 and the following packages:
+The scripts have been run in the FinnGen sandbox using Python version 3.7.3 and the following packages:
 
 * matplotlib (version 2.2.5)
 * numpy (1.16.6)
@@ -11,6 +11,19 @@ The scripts have been run in the FinnGen sandbox using Python version 2.7.16 and
 * scikit-learn (0.20.4)
 
 Other packages used should be standard Python, but a full list of installed packages in the FinnGen sandbox environment can be viewed at `data/requirements_finngen.txt`.
+
+Note that in order for the scripts to work, you will need to add the package src/ directory to your PATH:
+
+```
+export PATH="/full/path/to/INTERVENE_PheRS/src/:$PATH"
+```
+
+and to give executable rights to the Python scripts:
+
+```
+chmod u+x /full/path/to/INTERVENE_PheRS/src/*.py
+```
+
 
 ## Table of contents
 
