@@ -19,6 +19,7 @@ def PheRSwrapper():
     parser.add_argument("--targetphenotype",help="Name of the target phenotype.",type=str,default=None)
     parser.add_argument("--excludephecodes",help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
+    parser.add_argument("--model",help="Type of PheRS model fitted, default=elasticnet.",type=str,choices=['elasticnet','gradboost'],default='elasticnet')
     parser.add_argument("--testfraction",help="Fraction of IDs used in test set (default=0.15). Sampling at random.",type=str,default='0.15')
     parser.add_argument("--testidfile",help="Full path to a file containing the IDs used in the test set. If given, overrides --testfraction.",type=str,default=None)
     parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2009-01-01 2010-12-31).",type=str,nargs=2,default=['2009-01-01','2010-12-31'])
@@ -64,13 +65,20 @@ def PheRSwrapper():
 
     print('Preprocessing done.')
     #run PheRS fitting
-    cmd = 'fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
+    if args.model=='elasticnet':
+        cmd = 'fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
+    elif args.model=='gradboost':
+        cmd = 'fitGradBoost.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
+        
     logging.info(cmd)
     print('Starting to fit...')
     os.system(cmd)
 
     #score the fitted model
-    cmd = 'scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
+    if args.model=='elasticnet':
+        cmd = 'scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
+    elif args.model=='gradboost':
+        cmd = 'scoreGradBoost.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
     logging.info(cmd)
     os.system(cmd)
         
