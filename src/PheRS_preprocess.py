@@ -91,9 +91,11 @@ def PheRS_preprocess():
     logging.info("Phecode definitions read in successfully.")
     
     #excluded phecodes should not be included as predictors in the model
-    with open(args.excludephecodes,'rt') as infile:
-        r = csv.reader(infile,delimiter='\t')
-        for row in r: excluded_phecodes = row
+    excluded_phecodes = set()
+    if args.excluded_phecodes!=None:
+        with open(args.excludephecodes,'rt') as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r: excluded_phecodes = row
     
     excluded_phecodes = set(excluded_phecodes) #list of phecodes excluded
     #later we will add to this list phecodes that have less than args.frequency
