@@ -92,7 +92,7 @@ def PheRS_preprocess():
     
     #excluded phecodes should not be included as predictors in the model
     excluded_phecodes = set()
-    if args.excluded_phecodes!=None:
+    if args.excludephecodes!=None:
         with open(args.excludephecodes,'rt') as infile:
             r = csv.reader(infile,delimiter='\t')
             for row in r: excluded_phecodes = row
