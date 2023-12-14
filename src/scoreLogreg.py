@@ -14,7 +14,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve,ConfusionMatrixDisplay
+from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve
 from sklearn.preprocessing import StandardScaler
 
 def scoreLogreg():
@@ -162,13 +162,6 @@ def scoreLogreg():
         for i in range(len(fpr)):
             if i==thresholds.shape[0]: w.writerow([fpr[i],tpr[i],0.0])
             else: w.writerow([fpr[i],tpr[i],thresholds[i]])
-
-    #confusion matrix
-    #print(y_pred_labels)
-    #print(y_pred_labels.shape)
-    ConfusionMatrixDisplay.from_predictions(y_test,y_pred_labels)
-    plt.savefig(args.outdir+"confusion_matrix.png",dpi=300)
-    plt.clf()
     
     logging.info("Prediction metrics computed and saved successfully.")
 
