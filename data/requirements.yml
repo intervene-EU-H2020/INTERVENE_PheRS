@@ -1,0 +1,10 @@
+name: phers-intervene
+dependencies:
+  - python=3.9.18
+  - pip
+  - pip:
+    - matplotlib==3.8.2
+    - numpy==1.26.2
+    - pandas==2.1.4
+    - scikit-learn==1.3.2
+    - scipy==1.11.4

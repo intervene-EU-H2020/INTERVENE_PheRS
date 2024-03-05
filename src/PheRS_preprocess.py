@@ -40,7 +40,7 @@ def PheRS_preprocess():
     parser.add_argument("--minage",help="Minimum age at the start of the observation period to include (default=32).",type=float,default=32)
     parser.add_argument("--maxage",help="Maximum age at the start of the observation period to include (default=100).",type=float,default=100)
     parser.add_argument("--seed",help="Random number generator seed (default=42).",type=int,default=42)
-    parser.add_argument("--dateformatstr",help="Date format used (default='%Y-%m-%d')",type=str,default='%Y-%m-%d')
+    parser.add_argument("--dateformatstr",help="Date format used (default='%%Y-%%m-%%d')",type=str,default='%Y-%m-%d')
     parser.add_argument("--excludeICDfile",help="Full path to a file containing the ICD codes to be excluded. Format per row: ICD_version, ICD_code.",type=str,default=None)
     parser.add_argument("--missing",help="Fraction of missing values allowed for a feature to be included into the analysis (default=0.5).",type=float,default=0.5)
     parser.add_argument("--frequency",help="Minimum frequency for a predictor to be included into the analysis (default=0.01).",type=float,default=0.01)
@@ -91,9 +91,11 @@ def PheRS_preprocess():
     logging.info("Phecode definitions read in successfully.")
     
     #excluded phecodes should not be included as predictors in the model
-    with open(args.excludephecodes,'rt') as infile:
-        r = csv.reader(infile,delimiter='\t')
-        for row in r: excluded_phecodes = row
+    excluded_phecodes = set()
+    if args.excludephecodes!=None:
+        with open(args.excludephecodes,'rt') as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r: excluded_phecodes = row
     
     excluded_phecodes = set(excluded_phecodes) #list of phecodes excluded
     #later we will add to this list phecodes that have less than args.frequency
