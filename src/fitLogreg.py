@@ -55,7 +55,7 @@ def fitLogReg():
                 step = float(row[3])
                 hyper_grid[key] = []
                 for l1 in np.arange(min_l1,max_l1,step): hyper_grid[key].append(l1)
-            elif key=='Cs': hyper_grid[key] = [float(row[i]) for i in range(1,len(row))]
+            elif key=='C': hyper_grid[key] = [float(row[i]) for i in range(1,len(row))]
             elif key=='fit_intercept':
                 hyper_grid[key] = []
                 for entry in row[1:]:
@@ -126,8 +126,8 @@ def fitLogReg():
     print("Min y_train value="+str(np.min(y_train)))
     print("Max y_train value="+str(np.max(y_train)))
     #fitting the model
-    logreg = LogisticRegression(random_state=args.seed,solver='saga',class_weight='balanced',max_iter=100)
-    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=0,error_score='raise')
+    logreg = LogisticRegression(random_state=args.seed,solver='saga',class_weight='balanced',max_iter=250,tol=0.005)
+    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=5,error_score='raise')
     grid.fit(X_train,y_train)
     logging.info("Model fitting done.")
 
