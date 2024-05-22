@@ -196,8 +196,10 @@ def read_phenotype_file(args,
             #4) If the person receives the diagnosis during the "washout" period -> EXCLUDE from analysis
             #5) If the person receives the diagnosis after the observation period -> CONTROL
             data[ID][feature_names.index('case_status')] = row[target_column]#case/control status
-            
-            if data[ID][feature_names.index('case_status')]!='NA':
+            # We do not exclude cases or controls as defined in the target phenotypes except for prostate and breast cancer where excludes are opposite sex
+            # NAs are control exclusions -> we want as controls
+            if not (data[ID][feature_names.index('case_status')] == 'NA' and args.targetphenotype in ["C3_PROSTATE", "C3_BREAST", "T2D"]):
+                if data[ID][feature_names.index('case_status')] == 'NA': data[ID][feature_names.index('case_status')] = 0
                 data[ID][feature_names.index('case_status')] = int(data[ID][feature_names.index('case_status')])
                 ####### CASES
                 if data[ID][feature_names.index('case_status')]>0:
@@ -307,15 +309,17 @@ def read_phecode_diags_from_icd_file(args, data, ICD2phecode, exposure, phecodel
                 #add occurrence of primary ICD code first check if we have an exact match in the ICD to phecode mapping
                 if ICD_code in ICD2phecode[ICD_version]: phecodes = ICD2phecode[ICD_version][ICD_code]
                 else:
-                    #then check if there is a match to the first three characters
-                    #of the ICD code
-                    ICD_code_truncated = ICD_code[:3]
-                    if ICD_code_truncated in ICD2phecode[ICD_version]: phecodes = ICD2phecode[ICD_version][ICD_code_truncated]
+                    for trunc_len in range(1,5):
+                        if trunc_len > len(ICD_code): break
+                        ICD_code_truncated = ICD_code[:len(ICD_code)-trunc_len]
+                        if ICD_code_truncated in ICD2phecode[ICD_version]:
+                            phecodes = ICD2phecode[ICD_version][ICD_code_truncated]
+                            break
                 #add the occurrence of the primary phecode
                 if len(phecodes) > 0:
                     for phecode in phecodes:
                         if phecode in phecodelist:
-                            if args.ICD_levels == 1 and code_level == "1": data[ID][len(descriptive_features)+phecodelist.index(phecode)] = 1
+                            if (args.ICD_levels == 1 and code_level == "1") or (args.ICD_levels == -1): data[ID][len(descriptive_features)+phecodelist.index(phecode)] = 1
                             elif args.ICD_levels == 2: 
                                 if code_level == "2": data[ID][len(descriptive_features)+phecodelist.index(phecode)] = 1
                                 if code_level == "1": data[ID][len(descriptive_features)+phecodelist.index(phecode)] = 1/args.secondary_ICD_weight
@@ -403,7 +407,6 @@ def extra_phecode_excludes(args, data, excluded_phecodes, phecodelist, descripti
         if i > len(descriptive_features): excluded_phecodes["low_freq"][phecodelist[int(i)]] = frac_one[int(i)]
 
     logging.info("Min frequency was: " + str(args.frequency))
-    print(excluded_phecodes)
     #save excluded phecodes to a file
     with open(args.outdir+'target-'+args.targetphenotype+'-excluded-phecodes.txt','wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
