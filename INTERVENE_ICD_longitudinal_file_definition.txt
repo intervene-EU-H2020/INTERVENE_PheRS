@@ -16,6 +16,3 @@ column 2: EVENT_AGE - age at the event in years since birth - numeric.
 column 3: ICD_VERSION - ICD code version - string, possible values: (9/9CM/10/10CM).
 column 4: PRIMARY_ICD - primary ICD code - string, ICD code following ICD_VERSION definitions.
 column 5: SECONDARY_ICD - secondary ICD code - string, ICD code following ICD_VERSION definitions.
-- string, ICD code following ICD_VERSION definitions.
-column 5: SECONDARY_ICD - secondary ICD code - string, ICD code following ICD_VERSION definitions.
-
