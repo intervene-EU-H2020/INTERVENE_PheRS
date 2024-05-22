@@ -45,67 +45,58 @@ def scoreLogreg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['#ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
+        excludevars = set(['#ID','date_of_birth','end_of_follow_up', 'case_status', "train_status"])
         for row in r: excludevars.add(row[0])
+
     logging.info("Names of excluded variables read in successfully.")
     
-    #read in the training and test data                                             #first read in the header
-    if args.infile[-2:]=='gz': in_handle = gzip.open(args.infile,'rt',encoding='utf-8')
-    else: in_handle = open(args.infile,'rt',encoding='utf-8')
-    with in_handle as infile:
+    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        first_row = 1
+        usecols = []
         for row in r:
-            feature2index = {"#ID":0} #key = feature name, value = index in input file
-            for i in range(1,len(row)): feature2index[row[i]] = i
+            for pred in row:
+                if pred not in excludevars: usecols.append(pred)
             break
-    #then read in the data
-    usecols = []
-    features = []
-    excludevars.add('case_status')
-    excludevars.add('train_status')
-    for key in feature2index.keys():
-        if key not in excludevars:
-            usecols.append(key)
-            features.append((feature2index[key],key))
-    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
-    full_data = pd.read_csv(args.infile,delimiter='\t')
+    print("Selected features read in successfully")
+    print(usecols)
+
+    logging.info("Selected features read in successfully")
+    full_data = pd.read_csv(args.infile,delimiter='\t',encoding='utf-8')
     
     ########### Calculating prediction for all data
     #filter out excluded rows (e.g. because of wrong sex)
     full_data = full_data.loc[full_data['case_status']>=0]
-    #filter out training samples
-    case_status = full_data['case_status']
-    #get the test set IDs
+    # Get data
+    train_status = full_data['train_status'].values
     IDs = list(full_data['#ID'])
-
-    logging.info('Training and test data read in successfully.')
-
-    #keep only test data, impute missing values and standardize
-    y_test = case_status.values
+    y_test = full_data['case_status'].values
     X_test = full_data[usecols]
     #imputation and scaling
     X_test = imp.transform(X_test)
     X_test = scaler.transform(X_test)
-    logging.info("Division to train and test sets as well as imputation and standardization of features done successfully.")
 
     #predict using the loaded model
     y_pred = model.predict_proba(X_test)
-    y_pred_labels = model.predict(X_test)
-    logging.info("Labels for the test set predicted successfully.")
+    logging.info("Labels for whole data predicted successfully.")
 
     #save predictions to a file
     with gzip.open(args.outdir+"pred_probas_all.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
+        w.writerow(['#ID',"pred_class1_prob","true_class", "set"])
+        for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i], train_status[i]])
+
+    #save predictions to a file
+    with gzip.open(args.outdir+"pred_probas.txt.gz",'wt') as outfile:
+        w = csv.writer(outfile,delimiter='\t')
         w.writerow(['#ID',"pred_class1_prob","true_class"])
-        
-        for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
+        for i in range(0,len(y_test)): 
+            if train_status[i] == 0: w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
                                                   
         
     ########### Performance on train data
     train_data = full_data.loc[full_data['train_status']==1]
     y_train = train_data['case_status'].values
-    #keep only test data, impute missing values and standardize
+    #Getting exact feature columns used in training
     X_train = train_data[usecols]
     #imputation and scaling
     X_train = imp.transform(X_train)
@@ -164,7 +155,7 @@ def scoreLogreg():
     logging.info("Prediction metrics computed and saved successfully.")
 
    ########### Performance on test data
-    test_data = full_data.loc[full_data['train_status']!=1]
+    test_data = full_data.loc[full_data['train_status']==0]
     y_test = test_data['case_status'].values
     X_test = test_data[usecols]
     #imputation and scaling
