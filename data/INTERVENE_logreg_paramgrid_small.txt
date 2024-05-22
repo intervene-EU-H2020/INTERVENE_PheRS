@@ -1,4 +1,0 @@
-penalty	elasticnet
-class_weight	0.1	0.9	0.1
-l1_ratio	0.1	0.9	0.1
-fit_intercept	True	False

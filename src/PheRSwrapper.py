@@ -5,6 +5,8 @@ import argparse
 import logging
 import os
 
+
+
 def PheRSwrapper():
 
     #Command line arguments:
@@ -19,7 +21,6 @@ def PheRSwrapper():
     parser.add_argument("--targetphenotype",help="Name of the target phenotype.",type=str,default=None)
     parser.add_argument("--excludephecodes",help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
-    parser.add_argument("--model",help="Type of PheRS model fitted, default=elasticnet.",type=str,choices=['elasticnet','gradboost'],default='elasticnet')
     parser.add_argument("--testfraction",help="Fraction of IDs used in test set (default=0.15). Sampling at random.",type=str,default='0.15')
     parser.add_argument("--testidfile",help="Full path to a file containing the IDs used in the test set. If given, overrides --testfraction.",type=str,default=None)
     parser.add_argument("--washout_window",help="Start and end dates for washout (default= 2009-01-01 2010-12-31).",type=str,nargs=2,default=['2009-01-01','2010-12-31'])
@@ -35,51 +36,65 @@ def PheRSwrapper():
     parser.add_argument("--controlfraction",help="How many controls to use, number of cases multiplied by this flag value (default=None, meaning all controls are used).",type=str,default=None)
     parser.add_argument("--nproc",help="Number of parallel processes used (default=1).",type=str,default='1')
     parser.add_argument("--paramgridfile",help="File containing the parameter grid explored using cross-validation. One parameter per row, first value is key, rest are possible values.",type=str,default=None)
-    
+    parser.add_argument("--ICD_levels",help="Level of ICD-codes to use. 1=primary, 2=primary+secondary.",type=int,default=1)
+    parser.add_argument("--secondary_ICD_weight",help="How much secondary ICDs should weigh compared to primary",type=float,default=1)
+    parser.add_argument("--src_dir",help="Place of the scripts.",type=str,default=None)
+    parser.add_argument("--run_prep",help="Whether to run the preprocessing. Default = 1",type=int,default=1)
+    parser.add_argument("--run_fit",help="Whether to run the fitting. Default = 1",type=int,default=1)
+    parser.add_argument("--run_score",help="Whether to run the scoring. Default = 1",type=int,default=1)
+
     args = parser.parse_args()
+    print("starting: " + args.targetphenotype)
+
+    outdir_i = args.outdir+'exposure='+args.exposure_window[0]+"-"+args.exposure_window[1]+"-washoutend="+args.washout_window[1]+"-observationend="+args.observation_window[1]+'/'
+    # Create director if it does not exist
+    if not os.path.exists(outdir_i):
+        cmd = 'mkdir -p '+outdir_i
+        os.system(cmd)
+        logging.info(cmd + "\n")
 
     #save the command used to evoke this script into a file
     logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', filename=args.outdir+'PheRSwrapper.log',level=logging.INFO,filemode='w')
     logging.info("The command used to evoke this script:")
     logging.info(" ".join(sys.argv))
     
-    #run the whole PheRS processing pipeline
-    #first create oputput directory
-    outdir_i = args.outdir+'exposure='+args.exposure_window[0]+"-"+args.exposure_window[1]+"-washoutend="+args.washout_window[1]+"-observationend="+args.observation_window[1]+'/'
-    cmd = 'mkdir '+outdir_i
-    logging.info(cmd)
-    os.system(cmd)
-    #run preprocessing
-    #excludephecodes = ''
-    #for e in args.excludephecodes: excludephecodes += ' '+e
+
+    ######## Preprocessing ########
     includevars = ''
     for i in args.includevars: includevars += ' '+i
     
-    cmd = 'PheRS_preprocess.py --ICDfile '+args.ICDfile+' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes '+args.excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --testfraction '+args.testfraction+' --frequency '+args.frequency+' --maxage '+str(args.maxage)+' --minage '+str(args.minage)
-    if args.controlfraction!=None: cmd += ' --controlfraction '+args.controlfraction
-    if args.excludeICDfile!=None: cmd += ' --excludeICDfile '+args.excludeICDfile
-    if args.testidfile!=None: cmd += ' --testidfile '+args.testidfile
-    if len(includevars)>0: cmd += ' --includevars '+includevars
-    logging.info(cmd)
-    os.system(cmd)
+    preprocess_cmd = 'python3 ' + args.src_dir + 'PheRS_preprocess.py --ICDfile '+ args.ICDfile +' --phenotypefile '+args.phenotypefile+' --phecodefile '+args.phecodefile+' --ICD9tophecodefile '+args.ICD9tophecodefile+' --ICD10tophecodefile '+args.ICD10tophecodefile+' --ICD10CMtophecodefile '+args.ICD10CMtophecodefile+' --targetphenotype '+args.targetphenotype+' --excludephecodes '+args.excludephecodes+' --outdir '+outdir_i+' --washout_window '+args.washout_window[0]+' '+args.washout_window[1]+' --exposure_window '+args.exposure_window[0]+' '+args.exposure_window[1]+' --observation_window '+args.observation_window[0]+' '+args.observation_window[1]+' --seed '+args.seed+' --nproc '+args.nproc+' --testfraction '+args.testfraction+' --frequency '+args.frequency+' --maxage '+str(args.maxage)+' --minage '+str(args.minage) + ' --ICD_levels '+str(args.ICD_levels) + ' --secondary_ICD_weight '+str(args.secondary_ICD_weight)
+    
+    if args.controlfraction!=None: preprocess_cmd += ' --controlfraction '+args.controlfraction
+    if args.excludeICDfile!=None: preprocess_cmd += ' --excludeICDfile '+args.excludeICDfile
+    if args.testidfile!=None: preprocess_cmd += ' --testidfile '+args.testidfile
+    if len(includevars)>0: preprocess_cmd += ' --includevars '+includevars
 
-    print('Preprocessing done.')
-    #run PheRS fitting
-    if args.model=='elasticnet':
-        cmd = 'fitLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
-    elif args.model=='gradboost':
-        cmd = 'fitGradBoost.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --paramgridfile '+args.paramgridfile+' --outdir '+outdir_i+' --nproc '+args.nproc+' --scoring neg_log_loss'
-        
-    logging.info(cmd)
-    print('Starting to fit...')
-    os.system(cmd)
+    if args.run_prep == 1:
+        print("Preprocessing....")
+        logging.info(preprocess_cmd)
+        os.system(preprocess_cmd)
+        print("Preprocessing....done.")
 
-    #score the fitted model
-    if args.model=='elasticnet':
-        cmd = 'scoreLogreg.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --imputer '+outdir_i+'imputer.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
-    elif args.model=='gradboost':
-        cmd = 'scoreGradBoost.py --infile '+outdir_i+'target-'+args.targetphenotype+'-PheRS-ML-input.txt.gz --outdir '+outdir_i+' --scaler '+outdir_i+'scaler.pkl --excludevars '+outdir_i+'target-'+args.targetphenotype+'-excluded-phecodes.txt --model '+outdir_i+'best_model.pkl'
-    logging.info(cmd)
-    os.system(cmd)
+    in_file = outdir_i+'target-'+args.targetphenotype+"-PheRS-ML-input.txt.gz"
+    exclude_file = outdir_i+'target-'+args.targetphenotype+"-excluded-phecodes.txt"
+
+    ######## Fitting ########
+    fit_cmd = 'python3 ' + args.src_dir + 'fitLogreg.py --infile '+ in_file + " --excludevars "+ exclude_file + ' --paramgridfile ' + args.paramgridfile + ' --outdir '+ outdir_i + ' --nproc '+ args.nproc + ' --scoring neg_log_loss'
+
+    if args.run_fit == 1:
+        print("Fitting....")
+        logging.info(fit_cmd)
+        os.system(fit_cmd)
+        print("Fitting....done.")
+
+    ######## Scoring ########
+    score_cmd = 'python3 ' + args.src_dir + 'scoreLogreg.py --infile '+ in_file + ' --outdir '+ outdir_i + ' --scaler ' + outdir_i + 'scaler.pkl --imputer ' + outdir_i + 'imputer.pkl --excludevars ' + exclude_file + ' --model ' + outdir_i + 'best_model.pkl' + " --nproc 1"
+
+    if args.run_score == 1:
+        print("Scoring....")
+        logging.info(score_cmd)
+        os.system(score_cmd)
+        print("Scoring....done.")
         
 PheRSwrapper()

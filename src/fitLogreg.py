@@ -12,7 +12,6 @@ import numpy as np
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 
@@ -50,20 +49,13 @@ def fitLogReg():
             key = row[0]
             if row[0][0]=='#': continue #skip comment lines that start with #
             if key=='penalty': hyper_grid[key] = row[1:]
-            #elif key=='class_weight':
-            #    min_weight = float(row[1])
-            #    max_weight = float(row[2])
-            #    step = float(row[3])
-            #    hyper_grid[key] = []
-            #    for class1_frac in np.arange(min_weight,max_weight,step):
-            #        hyper_grid[key].append({1:class1_frac,0:1-class1_frac})
             elif key=='l1_ratio':
                 min_l1 = float(row[1])
                 max_l1 = float(row[2])
                 step = float(row[3])
                 hyper_grid[key] = []
                 for l1 in np.arange(min_l1,max_l1,step): hyper_grid[key].append(l1)
-            elif key=='Cs': hyper_grid[key] = [float(row[i]) for i in range(1,len(row))]
+            elif key=='C': hyper_grid[key] = [float(row[i]) for i in range(1,len(row))]
             elif key=='fit_intercept':
                 hyper_grid[key] = []
                 for entry in row[1:]:
@@ -74,57 +66,33 @@ def fitLogReg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt',encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
-        for row in r: excludevars.add(row[0])
+        excludevars = set(['#ID','date_of_birth','end_of_follow_up', 'case_status', "train_status"])#+['PC'+str(i) for i in range(1,11)])
+        for row in r: 
+            if(row[0] != "PheCode"): excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
-
-    #read in the training and test data
-    #first read in the header
-    if args.infile[-2:]=='gz':
-        in_handle = gzip.open(args.infile,'rt',encoding='utf-8')
-    else: in_handle = open(args.infile,'rt',encoding='utf-8')
-    with in_handle as infile:
+    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
+        usecols = []
         for row in r:
-            #print(row)
-            if row[0]=='#': continue
-            #row = row.strip().split('\t')
-            if row[0]=='#ID':
-                feature2index = {row[0][1:]:0} #key = feature name, value = index in input file
-                for i in range(1,len(row)): feature2index[row[i]] = i
-                break
-    #then read in the training data
-    usecols = []
-    features = []
-    excludevars.add('case_status')
-    excludevars.add('train_status')
-    for key in feature2index.keys():
-        if key not in excludevars:
-            usecols.append(key)
-            features.append((feature2index[key],key))
-    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
+            for pred in row:
+                if pred not in excludevars: usecols.append(pred)
+            break
+    print("Selected features read in successfully")
     print(usecols)
-    full_data = pd.read_csv(args.infile,delimiter='\t')
-    case_status = full_data['case_status']
-    train_status = full_data['train_status']
+    
+    logging.info("Selected features read in successfully")
+    full_data = pd.read_csv(args.infile,delimiter='\t',encoding='utf-8')
     #filter out excluded rows (e.g. because of wrong sex)
     #keep_rows = np.where(case_status>=0)[0]
     full_data = full_data.loc[full_data['case_status']>=0]
-    train_status = train_status.loc[full_data['case_status']>=0]
-    case_status = case_status.loc[full_data['case_status']>=0]
+    case_status = full_data['case_status']
+
     logging.info('Training and test data read in successfully.')
     
     #keep only training data and standardize
     y_train = case_status.loc[full_data['train_status']>0]
-    
     X_train = full_data.loc[full_data['train_status']>0]
     X_train = X_train[usecols]
-    #print(np.where(full_data[:,features.index('train_status')]>0)[0])
-    #print(features)
-    #print(features.index('case_status'))
-    #print("full_data shape: "+str(full_data.shape))
-    #print(X_train.shape)
-    #print(y_train.shape)
 
     #impute missing values as mean of the column
     imp = SimpleImputer(missing_values=np.nan,strategy='mean')
@@ -146,24 +114,20 @@ def fitLogReg():
     print("Min y_train value="+str(np.min(y_train)))
     print("Max y_train value="+str(np.max(y_train)))
     #fitting the model
-    logreg = LogisticRegression(random_state=args.seed,solver='saga',class_weight='balanced')
-    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=100,error_score='raise')
+    logreg = LogisticRegression(random_state=args.seed,solver='saga',class_weight='balanced',max_iter=250,tol=0.005)
+    grid = GridSearchCV(logreg,hyper_grid,cv=args.cv,n_jobs=args.nproc,refit=True,scoring=args.scoring,verbose=5,error_score='raise')
     grid.fit(X_train,y_train)
     logging.info("Model fitting done.")
 
-    #get coefficients from the decision function of the best model and compute p-values for them
-    #the meaning of p-values is not clear when using regularization
-    #pvals = logit_pvalue(grid.best_estimator_,X_train)
+    #get coefficients from the decision function
     with open(args.outdir+"best_model_coefficients.txt",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(['feature_name','coefficient'])
         w.writerow(['intercept',grid.best_estimator_.intercept_[0]])
-        print("len(features)="+str(len(features)))
+        print("len(features)="+str(len(usecols)))
         print("coef shape:"+str(grid.best_estimator_.coef_.shape))
-        for i in range(len(features)):
-            #print(features[i])
-            #print(grid.best_estimator_.coef_[0,i])
-            w.writerow([features[i],grid.best_estimator_.coef_[0,i]])
+        for i in range(len(usecols)):
+            w.writerow([usecols[i],grid.best_estimator_.coef_[0,i]])
     
     #save the cross-validation results to a file (this is a dictionary)
     with open(args.outdir+"cv_results.pkl",'wb') as outfile: pickle.dump(grid.cv_results_,outfile)
@@ -177,29 +141,5 @@ def fitLogReg():
     logging.info("Best model and its parameters saved.")
     
     logging.info("Program successfully terminated.")
-
-def logit_pvalue(model, x):
-    #This function is taken from https://stackoverflow.com/questions/25122999/scikit-learn-how-to-check-coefficients-significance
-    #from the answer by user David Dale.
-    #It returns the p-values as the significance of the Wald test.
-    #Calculate z-scores for scikit-learn LogisticRegression.
-    #parameters:
-    #    model: fitted sklearn.linear_model.LogisticRegression with intercept
-    #    x:     matrix on which the model was fit
-    #This function uses asymtptics for maximum likelihood estimates.
-    
-    p = model.predict_proba(x)
-    n = len(p)
-    m = len(model.coef_[0]) + 1
-    coefs = np.concatenate([model.intercept_, model.coef_[0]])
-    x_full = np.matrix(np.insert(np.array(x), 0, 1, axis = 1))
-    ans = np.zeros((m, m))
-    for i in range(n):
-        ans = ans + np.dot(np.transpose(x_full[i, :]), x_full[i, :]) * p[i,1] * p[i, 0]
-    vcov = np.linalg.inv(np.matrix(ans))
-    se = np.sqrt(np.diag(vcov))
-    t =  coefs/se  
-    p = (1 - norm.cdf(abs(t))) * 2
-    return p
     
 fitLogReg()

@@ -13,9 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import average_precision_score,roc_auc_score,roc_curve,precision_recall_curve,ConfusionMatrixDisplay
 
 def scoreLogreg():
 
@@ -47,95 +45,81 @@ def scoreLogreg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
+        excludevars = set(['#ID','date_of_birth','end_of_follow_up', 'case_status', "train_status"])
         for row in r: excludevars.add(row[0])
+
     logging.info("Names of excluded variables read in successfully.")
     
-    #read in the training and test data                                             #first read in the header
-    if args.infile[-2:]=='gz': in_handle = gzip.open(args.infile,'rt',encoding='utf-8')
-    else: in_handle = open(args.infile,'rt',encoding='utf-8')
-    with in_handle as infile:
+    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
+        usecols = []
         for row in r:
-            if row[0]=='#ID':
-                feature2index = {row[0][1:]:0} #key = feature name, value = index in input file
-                for i in range(1,len(row)): feature2index[row[i]] = i
-                break
-    #then read in the data
+            for pred in row:
+                if pred not in excludevars: usecols.append(pred)
+            break
+    print("Selected features read in successfully")
+    print(usecols)
+
+    logging.info("Selected features read in successfully")
+    full_data = pd.read_csv(args.infile,delimiter='\t',encoding='utf-8')
     
-    usecols = []
-    features = []
-    excludevars.add('case_status')
-    excludevars.add('train_status')
-    for key in feature2index.keys():
-        if key not in excludevars:
-            usecols.append(key)
-            features.append((feature2index[key],key))
-    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
-    full_data = pd.read_csv(args.infile,delimiter='\t')
-    #case_status = np.loadtxt(args.infile,usecols=feature2index['case_status'])
-    #train_status = np.loadtxt(args.infile,usecols=feature2index['train_status'])
+    ########### Calculating prediction for all data
     #filter out excluded rows (e.g. because of wrong sex)
     full_data = full_data.loc[full_data['case_status']>=0]
-    #filter out training samples
-    full_data = full_data.loc[full_data['train_status']==0]
-    #print(full_data.sort_values(by='#ID'))
-    #print(full_data['train_status'].value_counts())
-    #train_status = full_data['train_status']
-    case_status = full_data['case_status']
-    #get the test set IDs
-    IDs = list(full_data['#ID'])#np.genfromtxt(args.infile,usecols=[0],dtype=str)
-
-    logging.info('Training and test data read in successfully.')
-
-    #keep only test data, impute missing values and standardize
-    y_test = case_status.values
-    #X_test = full_data.loc[full_data['train_status']<1]
+    # Get data
+    train_status = full_data['train_status'].values
+    IDs = list(full_data['#ID'])
+    y_test = full_data['case_status'].values
     X_test = full_data[usecols]
-    #y_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('case_status')]
-    #X_test = full_data[np.where(full_data[:,features.index('train_status')]<1)[0][0],features.index('train_status')+1:]
     #imputation and scaling
     X_test = imp.transform(X_test)
     X_test = scaler.transform(X_test)
-    logging.info("Division to train and test sets as well as imputation and standardization of features done successfully.")
 
     #predict using the loaded model
     y_pred = model.predict_proba(X_test)
-    y_pred_labels = model.predict(X_test)
-    #print('y_pred')
-    #print(y_pred)
-    #print(y_pred.shape)
-    #print('y_test')
-    #print(y_test)
-    #print(y_test.shape)
-    logging.info("Labels for the test set predicted successfully.")
+    logging.info("Labels for whole data predicted successfully.")
+
+    #save predictions to a file
+    with gzip.open(args.outdir+"pred_probas_all.txt.gz",'wt') as outfile:
+        w = csv.writer(outfile,delimiter='\t')
+        w.writerow(['#ID',"pred_class1_prob","true_class", "set"])
+        for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i], train_status[i]])
 
     #save predictions to a file
     with gzip.open(args.outdir+"pred_probas.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
-        w.writerow(["#ID","pred_class1_prob","true_class"])
-        
-        for i in range(0,len(y_test)): w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
+        w.writerow(['#ID',"pred_class1_prob","true_class"])
+        for i in range(0,len(y_test)): 
+            if train_status[i] == 0: w.writerow([IDs[i],y_pred[i,np.where(model.classes_==1)][0][0],y_test[i]])
                                                   
+        
+    ########### Performance on train data
+    train_data = full_data.loc[full_data['train_status']==1]
+    y_train = train_data['case_status'].values
+    #Getting exact feature columns used in training
+    X_train = train_data[usecols]
+    #imputation and scaling
+    X_train = imp.transform(X_train)
+    X_train = scaler.transform(X_train)
+
+    #predict using the loaded model
+    y_pred_train = model.predict_proba(X_train)
+    y_pred_train_labels = model.predict(X_train)
+
     #precision-recall curve and average precision score
-    #print("y_pred shape:")
-    #print(y_pred[:,np.where(model.classes_==1)].shape)
-    auprc = average_precision_score(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
-    precision,recall,thresholds = precision_recall_curve(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
-    #print(precision.shape)
-    #print(recall.shape)
-    #print(thresholds.shape)
+    auprc = average_precision_score(y_train,y_pred_train[:,np.where(model.classes_==1)].flatten())
+    precision,recall,thresholds = precision_recall_curve(y_train,y_pred_train[:,np.where(model.classes_==1)].flatten())
     print("auPRC="+str(round(auprc,3)))
-    rand_AUprc = round(np.sum(y_test)/len(y_test),3)
+    rand_AUprc = round(np.sum(y_train)/len(y_train),3)
     plt.plot(np.linspace(0,1),rand_AUprc*np.ones(shape=(1,50)).flatten(),'--k',label="random, auPRC="+str(rand_AUprc))
     plt.plot(recall,precision,label="elastic net, AUprc="+str(round(auprc,3)))
     plt.xlabel("recall")
     plt.ylabel("precision")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(args.outdir+"precision_recall_curve.png",dpi=300)
+    plt.savefig(args.outdir+"precision_recall_curve_train.png",dpi=300)
     plt.clf()
-    with gzip.open(args.outdir+"precision_recall_curve.txt.gz",'wt') as outfile:
+    with gzip.open(args.outdir+"precision_recall_curve_train.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(["#AUprc="+str(auprc)])
         w.writerow(["#recall","precision","threshold"])
@@ -144,8 +128,8 @@ def scoreLogreg():
             else: w.writerow([recall[i],precision[i],thresholds[i]])
                                                                             
     #receiver operator characteristics curve and AUC
-    auc = roc_auc_score(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
-    fpr,tpr,thresholds = roc_curve(y_test,y_pred[:,np.where(model.classes_==1)].flatten())
+    auc = roc_auc_score(y_train,y_pred_train[:,np.where(model.classes_==1)].flatten())
+    fpr,tpr,thresholds = roc_curve(y_train,y_pred_train[:,np.where(model.classes_==1)].flatten())
     print("AUC="+str(round(auc,3)))
     plt.plot(np.linspace(0,1),np.linspace(0,1),'--k',label="random, AUC=0.5")
     plt.plot(fpr,tpr,label="elastic net, AUC="+str(round(auc,3)))
@@ -153,19 +137,83 @@ def scoreLogreg():
     plt.ylabel("tpr")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(args.outdir+"roc_curve.png",dpi=300)
+    plt.savefig(args.outdir+"roc_curve_train.png",dpi=300)
     plt.clf()
-    with gzip.open(args.outdir+"roc_curve.txt.gz",'wt') as outfile:
+    with gzip.open(args.outdir+"roc_curve_train.txt.gz",'wt') as outfile:
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(["#AUC="+str(auc)])
         w.writerow(["#fpr","tpr","threshold"])
         for i in range(len(fpr)):
             if i==thresholds.shape[0]: w.writerow([fpr[i],tpr[i],0.0])
             else: w.writerow([fpr[i],tpr[i],thresholds[i]])
+
+    #confusion matrix
+    ConfusionMatrixDisplay.from_predictions(y_train,y_pred_train_labels)
+    plt.savefig(args.outdir+"confusion_matrix_train.png",dpi=300)
+    plt.clf()
+    
+    logging.info("Prediction metrics computed and saved successfully.")
+
+   ########### Performance on test data
+    test_data = full_data.loc[full_data['train_status']==0]
+    y_test = test_data['case_status'].values
+    X_test = test_data[usecols]
+    #imputation and scaling
+    X_test = imp.transform(X_test)
+    X_test = scaler.transform(X_test)
+
+    #predict using the loaded model
+    y_test_pred = model.predict_proba(X_test)
+    y_pred_test_labels = model.predict(X_test)
+
+    #precision-recall curve and average precision score
+    auprc = average_precision_score(y_test,y_test_pred[:,np.where(model.classes_==1)].flatten())
+    precision,recall,thresholds = precision_recall_curve(y_test,y_test_pred[:,np.where(model.classes_==1)].flatten())
+    print("auPRC="+str(round(auprc,3)))
+    rand_AUprc = round(np.sum(y_test)/len(y_test),3)
+    plt.plot(np.linspace(0,1),rand_AUprc*np.ones(shape=(1,50)).flatten(),'--k',label="random, auPRC="+str(rand_AUprc))
+    plt.plot(recall,precision,label="elastic net, AUprc="+str(round(auprc,3)))
+    plt.xlabel("recall")
+    plt.ylabel("precision")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(args.outdir+"precision_recall_curve_test.png",dpi=300)
+    plt.clf()
+    with gzip.open(args.outdir+"precision_recall_curve_test.txt.gz",'wt') as outfile:
+        w = csv.writer(outfile,delimiter='\t')
+        w.writerow(["#AUprc="+str(auprc)])
+        w.writerow(["#recall","precision","threshold"])
+        for i in range(len(precision)):
+            if i==thresholds.shape[0]: w.writerow([recall[i],precision[i],0.0])
+            else: w.writerow([recall[i],precision[i],thresholds[i]])
+                                                                            
+    #receiver operator characteristics curve and AUC
+    auc = roc_auc_score(y_test,y_test_pred[:,np.where(model.classes_==1)].flatten())
+    fpr,tpr,thresholds = roc_curve(y_test,y_test_pred[:,np.where(model.classes_==1)].flatten())
+    print("AUC="+str(round(auc,3)))
+    plt.plot(np.linspace(0,1),np.linspace(0,1),'--k',label="random, AUC=0.5")
+    plt.plot(fpr,tpr,label="elastic net, AUC="+str(round(auc,3)))
+    plt.xlabel("fpr")
+    plt.ylabel("tpr")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(args.outdir+"roc_curve_test.png",dpi=300)
+    plt.clf()
+    with gzip.open(args.outdir+"roc_curve_test.txt.gz",'wt') as outfile:
+        w = csv.writer(outfile,delimiter='\t')
+        w.writerow(["#AUC="+str(auc)])
+        w.writerow(["#fpr","tpr","threshold"])
+        for i in range(len(fpr)):
+            if i==thresholds.shape[0]: w.writerow([fpr[i],tpr[i],0.0])
+            else: w.writerow([fpr[i],tpr[i],thresholds[i]])
+
+    #confusion matrix
+    ConfusionMatrixDisplay.from_predictions(y_test,y_pred_test_labels)
+    plt.savefig(args.outdir+"confusion_matrix_test.png",dpi=300)
+    plt.clf()
     
     logging.info("Prediction metrics computed and saved successfully.")
 
     
 scoreLogreg()    
     
-
