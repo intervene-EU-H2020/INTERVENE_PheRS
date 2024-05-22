@@ -66,34 +66,22 @@ def fitLogReg():
     #read in names of variables that should be excluded from the model
     with open(args.excludevars,'rt',encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        excludevars = set(['#ID','date_of_birth','end_of_follow_up'])#+['PC'+str(i) for i in range(1,11)])
+        excludevars = set(['#ID','date_of_birth','end_of_follow_up', 'case_status', "train_status"])#+['PC'+str(i) for i in range(1,11)])
         for row in r: 
             if(row[0] != "PheCode"): excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
-
-    #read in the training and test data
-    #first read in the header
-    if args.infile[-2:]=='gz':
-        in_handle = gzip.open(args.infile,'rt',encoding='utf-8')
-    else: in_handle = open(args.infile,'rt',encoding='utf-8')
-    with in_handle as infile:
+    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
         r = csv.reader(infile,delimiter='\t')
-        first_row = 1
+        usecols = []
         for row in r:
-            feature2index = {'#ID':0} #key = feature name, value = index in input file
-            for i in range(1,len(row)): feature2index[row[i]] = i
+            for pred in row:
+                if pred not in excludevars: usecols.append(pred)
             break
-    #then read in the training data
-    usecols = []
-    features = []
-    excludevars.add('case_status')
-    excludevars.add('train_status')
-    for key in feature2index.keys():
-        if key not in excludevars:
-            usecols.append(key)
-            features.append((feature2index[key],key))
-    features = [f[1] for f in sorted(features)] #this list now contains the names of the features in the same order as the columns are in full_data
-    full_data = pd.read_csv(args.infile,delimiter='\t')
+    print("Selected features read in successfully")
+    print(usecols)
+    
+    logging.info("Selected features read in successfully")
+    full_data = pd.read_csv(args.infile,delimiter='\t',encoding='utf-8')
     #filter out excluded rows (e.g. because of wrong sex)
     #keep_rows = np.where(case_status>=0)[0]
     full_data = full_data.loc[full_data['case_status']>=0]
@@ -136,10 +124,10 @@ def fitLogReg():
         w = csv.writer(outfile,delimiter='\t')
         w.writerow(['feature_name','coefficient'])
         w.writerow(['intercept',grid.best_estimator_.intercept_[0]])
-        print("len(features)="+str(len(features)))
+        print("len(features)="+str(len(usecols)))
         print("coef shape:"+str(grid.best_estimator_.coef_.shape))
-        for i in range(len(features)):
-            w.writerow([features[i],grid.best_estimator_.coef_[0,i]])
+        for i in range(len(usecols)):
+            w.writerow([usecols[i],grid.best_estimator_.coef_[0,i]])
     
     #save the cross-validation results to a file (this is a dictionary)
     with open(args.outdir+"cv_results.pkl",'wb') as outfile: pickle.dump(grid.cv_results_,outfile)
