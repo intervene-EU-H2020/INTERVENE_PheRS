@@ -315,7 +315,7 @@ def read_phecode_diags_from_icd_file(args, data, ICD2phecode, exposure, phecodel
                     else:
                         for trunc_len in range(1,5):
                             if trunc_len > len(ICD_code): break
-                            ICD_code_truncated = ICD_code[1:len(ICD_code)-trunc_len]
+                            ICD_code_truncated = ICD_code[0:len(ICD_code)-trunc_len]
                             if ICD_code_truncated in ICD2phecode[ICD_version]:
                                 phecodes = ICD2phecode[ICD_version][ICD_code_truncated]
                                 break
