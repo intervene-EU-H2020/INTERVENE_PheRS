@@ -96,13 +96,19 @@ def match_ICD2phecode(ICD_version,
     else:
         #then check if there is a match to the first three characters of the ICD code
         mapped = False
-        for trunc_len in range(1,5):
-            if trunc_len > len(primary_ICD): break
-            primary_ICD_truncated = primary_ICD[0:len(primary_ICD)-trunc_len]
-            if primary_ICD_truncated in ICD2phecode[ICD_version]: 
-                phecode = ICD2phecode[ICD_version][primary_ICD_truncated]
-                mapped = True
-                break
+        # try .0 -> often a problem in EstB
+        ICD_code_longer = primary_ICD+"0"
+        if ICD_code_longer in ICD2phecode[ICD_version]: 
+            phecode = ICD2phecode[ICD_version][ICD_code_longer]
+            mapped = True
+        else:
+            for trunc_len in range(1,5):
+                if trunc_len > len(primary_ICD): break
+                primary_ICD_truncated = primary_ICD[0:len(primary_ICD)-trunc_len]
+                if primary_ICD_truncated in ICD2phecode[ICD_version]: 
+                    phecode = ICD2phecode[ICD_version][primary_ICD_truncated]
+                    mapped = True
+                    break
         if not mapped:
             #discard this ICD code
             if primary_ICD not in not_found_ICD[ICD_version]: not_found_ICD[ICD_version][primary_ICD] = dict()
@@ -146,11 +152,10 @@ def get_phecode_stats(args, indvs, ICD2phecode, exposure_end, exposure_start):
                 if (Event_date > exposure_end) | (Event_date < exposure_start): continue
 
                 ICD_version = row[2]
-                primary_ICD = row[3]
+                ICD_code = row[3].strip('"').strip("'").replace('.','') #remove . from the ICD codes
                 secondary_ICD = row[4] #source of the ICD code
 
                 # ICD level
-                ICD_code = primary_ICD.strip('"').strip("'").replace('.','') #remove . from the ICD codes
                 if (secondary_ICD=="1") or (args.ICD_levels==-1):
                     if ICD_version not in prim_icd_counts: prim_icd_counts[ICD_version] = {}
                     if ICD_code not in prim_icd_counts[ICD_version]: prim_icd_counts[ICD_version][ICD_code] = {}
@@ -162,7 +167,7 @@ def get_phecode_stats(args, indvs, ICD2phecode, exposure_end, exposure_start):
                     if ID not in sec_icd_counts[ICD_version][ICD_code]: sec_icd_counts[ICD_version][ICD_code][ID] = 1
                     else: sec_icd_counts[ICD_version][ICD_code][ID] += 1
                 # PheCode level
-                phecodes, not_found_ICD = match_ICD2phecode(ICD_version, primary_ICD, ID, ICD2phecode, not_found_ICD)
+                phecodes, not_found_ICD = match_ICD2phecode(ICD_version, ICD_code, ID, ICD2phecode, not_found_ICD)
                 for phecode in phecodes:
                     #add the occurrence of the primary phecode
                     if phecode=="NA": continue

@@ -303,18 +303,22 @@ def read_phecode_diags_from_icd_file(args, data, ICD2phecode, exposure, phecodel
             exposure_end_age = (exposure["end"]-data[ID][0]).total_seconds()/(365.0*24*60*60)
             if event_age>=exp_start_age and event_age<=exposure_end_age:
                 ICD_version = row[2]
-                ICD_code = row[3]
+                ICD_code = row[3].strip('"').strip("'").replace('.','')
                 code_level = row[4]
                 phecodes = set()
                 #add occurrence of primary ICD code first check if we have an exact match in the ICD to phecode mapping
                 if ICD_code in ICD2phecode[ICD_version]: phecodes = ICD2phecode[ICD_version][ICD_code]
                 else:
-                    for trunc_len in range(1,5):
-                        if trunc_len > len(ICD_code): break
-                        ICD_code_truncated = ICD_code[:len(ICD_code)-trunc_len]
-                        if ICD_code_truncated in ICD2phecode[ICD_version]:
-                            phecodes = ICD2phecode[ICD_version][ICD_code_truncated]
-                            break
+                    # try .0 -> often a problem in EstB
+                    ICD_code_longer = ICD_code+"0"
+                    if ICD_code_longer in ICD2phecode[ICD_version]: phecodes = ICD2phecode[ICD_version][ICD_code_longer]
+                    else:
+                        for trunc_len in range(1,5):
+                            if trunc_len > len(ICD_code): break
+                            ICD_code_truncated = ICD_code[1:len(ICD_code)-trunc_len]
+                            if ICD_code_truncated in ICD2phecode[ICD_version]:
+                                phecodes = ICD2phecode[ICD_version][ICD_code_truncated]
+                                break
                 #add the occurrence of the primary phecode
                 if len(phecodes) > 0:
                     for phecode in phecodes:
