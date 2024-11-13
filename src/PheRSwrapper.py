@@ -20,6 +20,7 @@ def PheRSwrapper():
     parser.add_argument("--ICD10CMtophecodefile",help="Full path to the ICD10CM to phecode map (NOTE: comma-separated).",type=str,default=None)
     parser.add_argument("--targetphenotype",help="Name of the target phenotype.",type=str,default=None)
     parser.add_argument("--excludephecodes",help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be excluded from the analysis.",type=str,default=None)
+    parser.add_argument("--includephecodes", help="Path to a file containing the Phecode(s) corresponding to and related to the target phenotype that should be included in the analysis.", type=str, default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
     parser.add_argument("--testfraction",help="Fraction of IDs used in test set (default=0.15). Sampling at random.",type=str,default='0.15')
     parser.add_argument("--testidfile",help="Full path to a file containing the IDs used in the test set. If given, overrides --testfraction.",type=str,default=None)
@@ -80,7 +81,10 @@ def PheRSwrapper():
     exclude_file = outdir_i+'target-'+args.targetphenotype+"-excluded-phecodes.txt"
 
     ######## Fitting ########
-    fit_cmd = 'python3 ' + args.src_dir + 'fitLogreg.py --infile '+ in_file + " --excludevars "+ exclude_file + ' --paramgridfile ' + args.paramgridfile + ' --outdir '+ outdir_i + ' --nproc '+ args.nproc + ' --scoring neg_log_loss'
+    if args.includephecodes:
+        fit_cmd = 'python3 ' + args.src_dir + 'fitLogreg.py --infile '+ in_file + " --excludevars "+ exclude_file + " --includevars " + includephecodes + ' --paramgridfile ' + args.paramgridfile + ' --outdir '+ outdir_i + ' --nproc '+ args.nproc + ' --scoring neg_log_loss'
+    else:
+        fit_cmd = 'python3 ' + args.src_dir + 'fitLogreg.py --infile '+ in_file + " --excludevars "+ exclude_file + ' --paramgridfile ' + args.paramgridfile + ' --outdir '+ outdir_i + ' --nproc '+ args.nproc + ' --scoring neg_log_loss'
 
     if args.run_fit == 1:
         print("Fitting....")
@@ -89,7 +93,10 @@ def PheRSwrapper():
         print("Fitting....done.")
 
     ######## Scoring ########
-    score_cmd = 'python3 ' + args.src_dir + 'scoreLogreg.py --infile '+ in_file + ' --outdir '+ outdir_i + ' --scaler ' + outdir_i + 'scaler.pkl --imputer ' + outdir_i + 'imputer.pkl --excludevars ' + exclude_file + ' --model ' + outdir_i + 'best_model.pkl' + " --nproc 1"
+    if args.includephecodes:
+        score_cmd = 'python3 ' + args.src_dir + 'scoreLogreg.py --infile '+ in_file + ' --outdir '+ outdir_i + ' --scaler ' + outdir_i + 'scaler.pkl --imputer ' + outdir_i + 'imputer.pkl --excludevars ' + exclude_file + " --includevars " + includephecodes +  ' --model ' + outdir_i + 'best_model.pkl' + " --nproc 1"
+    else:
+        score_cmd = 'python3 ' + args.src_dir + 'scoreLogreg.py --infile '+ in_file + ' --outdir '+ outdir_i + ' --scaler ' + outdir_i + 'scaler.pkl --imputer ' + outdir_i + 'imputer.pkl --excludevars ' + exclude_file + ' --model ' + outdir_i + 'best_model.pkl' + " --nproc 1"
 
     if args.run_score == 1:
         print("Scoring....")

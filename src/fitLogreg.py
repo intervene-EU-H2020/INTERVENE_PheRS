@@ -25,6 +25,7 @@ def fitLogReg():
     
     parser.add_argument("--infile",help="Full path to an INTERVENE phecode file. If last two letters of file name are gz, gzipped file is assumed.",type=str,default=None)
     parser.add_argument("--excludevars",help="Full path to a file containing variable names that should be excluded from the model (default=nothing).",type=str,default=None)
+    parser.add_argument("--includevars",help="Full path to a file containing variable names that should be included in the model (default=nothing, all phecodes used with at least 1%).",type=str,default=None)
     parser.add_argument("--paramgridfile",help="File containing the parameter grid explored using cross-validation. One parameter per row, first value is key, rest are possible values.",type=str,default=None)
     parser.add_argument("--outdir",help="Output directory (must exist, default=./).",type=str,default="./")
     parser.add_argument("--penalty",help="Penalty used with the model ('l1','l2' or 'elasticnet'=default).",type=str,choices=['l1','l2','elasticnet'],default='elasticnet')
@@ -70,14 +71,27 @@ def fitLogReg():
         for row in r: 
             if(row[0] != "PheCode"): excludevars.add(row[0])
     logging.info("Names of excluded variables read in successfully.")
-    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
-        r = csv.reader(infile,delimiter='\t')
-        usecols = []
-        for row in r:
-            for pred in row:
-                if pred not in excludevars: usecols.append(pred)
-            break
-    print("Selected features read in successfully")
+
+    # read in the selected features
+    usecols = []
+    if args.includevars:
+        with open(args.includevars, "rt", encoding="utf-8") as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r:
+                if row[0] != "phecode" and row[0] not in excludevars: usecols.append(row[0])
+            usecols.append("age")
+            usecols.append("sex")
+            logging.info("Selected features read in successfully from includevars file.")
+            print("Selected features read in successfully from includevars file.")
+    else:
+        with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r:
+                for pred in row:
+                    if pred not in excludevars: usecols.append(pred)
+                break
+            logging.info("Selected features read in successfully from data file.")
+            print("Selected features read in successfully from data file.")
     print(usecols)
     
     logging.info("Selected features read in successfully")
