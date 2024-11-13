@@ -25,6 +25,7 @@ def scoreLogreg():
     parser.add_argument("--scaler",help="Scaler model fit on the training data in pickle format.",type=str,default=None)
     parser.add_argument("--imputer",help="Imputer model fit on the training data in pickle format.",type=str,default=None)
     parser.add_argument("--excludevars",help="Full path to a file containing variable names that should be excluded from the model (default=nothing).",type=str,default=None)
+    parser.add_argument("--includevars", help="Full path to a file containing variable names that should be included in the model (default=nothing, all phecodes used with at least 1%).",type=str,default=None)
     parser.add_argument("--model",help="Pre-fit sklearn model in pickle-format.",type=str,default=None)
     parser.add_argument("--seed",help="Random number generator seed (default=42).",type=int,default=42)
     parser.add_argument("--nproc",help="Number of parallel processes used (default=1).",type=int,default=1)
@@ -50,17 +51,27 @@ def scoreLogreg():
 
     logging.info("Names of excluded variables read in successfully.")
     
-    with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
-        r = csv.reader(infile,delimiter='\t')
-        usecols = []
-        for row in r:
-            for pred in row:
-                if pred not in excludevars: usecols.append(pred)
-            break
-    print("Selected features read in successfully")
+    usecols = []
+    if args.includevars:
+        with open(args.includevars, "rt", encoding="utf-8") as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r:
+                if row[0] != "phecode" and row[0] not in excludevars: usecols.append(row[0])
+            usecols.append("age")
+            usecols.append("sex")
+            logging.info("Selected features read in successfully from includevars file.")
+            print("Selected features read in successfully from includevars file.")
+    else:
+        with gzip.open(args.infile, "rt",encoding='utf-8') as infile:
+            r = csv.reader(infile,delimiter='\t')
+            for row in r:
+                for pred in row:
+                    if pred not in excludevars: usecols.append(pred)
+                break
+            logging.info("Selected features read in successfully from data file.")
+            print("Selected features read in successfully from data file.")
     print(usecols)
 
-    logging.info("Selected features read in successfully")
     full_data = pd.read_csv(args.infile,delimiter='\t',encoding='utf-8')
     
     ########### Calculating prediction for all data
